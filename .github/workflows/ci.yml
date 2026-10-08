@@ -30,6 +30,16 @@ jobs:
       DATABASE_URL: postgres://homebase:homebase@localhost:5432/homebase
     steps:
       - uses: actions/checkout@v7
+      - name: Deploy and Docker shell scripts are executable in git
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' path; do
+            mode=$(git ls-files -s -- "$path" | awk '{print $1}')
+            if [ "$mode" != 100755 ]; then
+              echo "$path is mode $mode in git, expected 100755"
+              exit 1
+            fi
+          done < <(git ls-files -z 'deploy/*.sh' 'deploy/**/*.sh' 'docker/*.sh')
       - uses: astral-sh/setup-uv@v10.2.0
       - name: Install dependencies
         run: uv sync --locked

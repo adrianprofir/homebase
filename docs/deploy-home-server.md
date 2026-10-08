@@ -81,7 +81,7 @@ The steps below use these stand-in values, which you replace with your own:
 5. Schedule the nightly backup in the crontab of a user in the `docker` group (`crontab -e`):
 
    ```sh
-   30 2 * * * /srv/homebase/deploy/backup.sh
+   30 2 * * * /bin/bash /srv/homebase/deploy/backup.sh
    ```
 
 6. Open `http://192.0.2.10:8090/` from the home network, or `http://<tailscale-address>:8090/` over Tailscale.
