@@ -19,7 +19,7 @@ dependencies = [
     "django-environ>=0.14",
     "gunicorn>=26.2",
     "httpx>=0.28",
-    "psycopg[binary]>=3.3",
+    "psycopg[binary]>=3.3.6",
     "whitenoise>=6.12",
 ]
 
