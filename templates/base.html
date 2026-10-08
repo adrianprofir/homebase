@@ -1,0 +1,44 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  {% block head %}{% endblock %}
+  <title>{% block title %}homebase{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/homebase.css' %}">
+</head>
+<body>
+  {% if main_site_url %}
+    <div class="main-site-bar">
+      <div class="wrap">
+        <a class="main-site-link" href="{{ main_site_url }}" aria-label="Back to {{ main_site_name }}"><span aria-hidden="true">←</span> {{ main_site_name }}</a>
+      </div>
+    </div>
+  {% endif %}
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <a class="brand" href="{% url 'dashboard' %}">homebase</a>
+      {% if user.is_authenticated %}
+        <nav class="topnav">
+          <a href="{% url 'dashboard' %}">Dashboard</a>
+          {% if user.is_staff %}<a href="{% url 'admin:index' %}">Admin</a>{% endif %}
+          <form method="post" action="{% url 'logout' %}">
+            {% csrf_token %}
+            <button type="submit" class="link-button">Log out</button>
+          </form>
+        </nav>
+      {% endif %}
+    </div>
+  </header>
+  <main class="wrap">
+    {% if demo_mode %}
+      <div class="banner banner-info" role="note">
+        <strong>Demo.</strong> Everything here is fictional, and the app checks and provider syncs are simulated.
+        The inventory is edited in the Django admin, which this demo keeps private; the README has screenshots of it.
+      </div>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

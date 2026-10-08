@@ -1,0 +1,131 @@
+# A public, read-only homebase demo on fictional data (DEMO_MODE), for a reverse proxy or
+# tunnel. See docs/demo.md. Run it from this directory with a .env copied from
+# .env.demo.example:
+#
+#   edge network --> homebase-web (alias ${DEMO_EDGE_ALIAS}:8000) --> db (Postgres)
+#                    checker (simulated checks, nightly reseed) --> db
+#
+# Only homebase-web joins the external edge network, under a stack-unique alias. Anything
+# that routes to this demo uses that alias, never a bare name such as web: on a shared edge
+# network other stacks also answer to web. Compose registers a service's own name as an
+# alias on every network it joins, so this service is not called web: that would make this
+# demo answer to web on the edge network too. db and checker sit on an internal network
+# with no route out. Compose project and image names differ from the main stack's (project
+# "homebase", image homebase:latest), so building the demo never retags that image.
+# 127.0.0.1:${DEMO_SMOKE_PORT} exists for smoke tests from the host only.
+name: showcase-homebase
+
+x-app: &app
+  image: showcase-homebase-app:latest
+  restart: unless-stopped
+  environment: &app-env
+    SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
+    DATABASE_URL: postgres://homebase:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/homebase
+    DEBUG: "false"
+    DEMO_MODE: "true"
+    MAIN_SITE_URL: ${MAIN_SITE_URL:-}
+    TIME_ZONE: ${TIME_ZONE:-UTC}
+    CHECK_INTERVAL_SECONDS: ${CHECK_INTERVAL_SECONDS:-300}
+
+services:
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: homebase
+      POSTGRES_USER: homebase
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U homebase -d homebase"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  homebase-web:
+    <<: *app
+    build:
+      context: ../..
+    environment:
+      <<: *app-env
+      RUN_MIGRATIONS: "1"
+      ALLOWED_HOSTS: ${DEMO_HOSTNAME:?set DEMO_HOSTNAME in .env},localhost,127.0.0.1
+      CSRF_TRUSTED_ORIGINS: https://${DEMO_HOSTNAME}
+      # TLS ends at the proxy or tunnel, which forwards plain HTTP with X-Forwarded-Proto.
+      TRUST_X_FORWARDED_PROTO: "true"
+      SESSION_COOKIE_SECURE: "true"
+      CSRF_COOKIE_SECURE: "true"
+      SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT:-true}
+      SECURE_HSTS_SECONDS: ${SECURE_HSTS_SECONDS:-3600}
+    # The entrypoint migrates first. Seeding only fills an empty database, so a restart
+    # keeps the data; the checker reseeds nightly.
+    command:
+      - sh
+      - -c
+      - python manage.py seed_demo --if-empty && exec gunicorn homebase.wsgi:application
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${DEMO_SMOKE_PORT:-8094}:8000"
+    networks:
+      backend:
+      edge:
+        aliases:
+          - ${DEMO_EDGE_ALIAS:?set DEMO_EDGE_ALIAS in .env}
+    healthcheck:
+      # /healthz checks the database too, and answers whatever ALLOWED_HOSTS lists.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 5
+
+  checker:
+    <<: *app
+    # Simulated checks only: DEMO_MODE makes `monitor` write synthetic results without a
+    # network request. Once a day, in the DEMO_RESET_HOUR hour, the demo is rebuilt so its
+    # dates stay fresh.
+    command:
+      - sh
+      - -c
+      - |
+        while true; do
+          python manage.py monitor
+          touch /tmp/heartbeat
+          today=$$(date +%F)
+          if [ "$$(date +%H)" = "$${DEMO_RESET_HOUR:-03}" ] && [ "$$(cat /tmp/last-reset 2>/dev/null)" != "$$today" ]; then
+            python manage.py seed_demo --reset && echo "$$today" > /tmp/last-reset
+          fi
+          sleep "$${CHECK_INTERVAL_SECONDS:-300}"
+        done
+    environment:
+      <<: *app-env
+      DEMO_RESET_HOUR: ${DEMO_RESET_HOUR:-03}
+    init: true
+    depends_on:
+      homebase-web:
+        condition: service_healthy
+    networks:
+      - backend
+    healthcheck:
+      # The loop touches a heartbeat file after every monitor run.
+      test: ["CMD-SHELL", "test -n \"$$(find /tmp/heartbeat -mmin -30 2>/dev/null)\""]
+      interval: 60s
+      timeout: 5s
+      start_period: 90s
+      retries: 3
+
+volumes:
+  pgdata:
+
+networks:
+  # No route out of this network, so db and checker cannot reach the internet.
+  backend:
+    internal: true
+  edge:
+    external: true
+    name: ${DEMO_EDGE_NETWORK:-homebase-demo-edge}

@@ -1,0 +1,372 @@
+{% extends "base.html" %}
+{% load humanize homebase %}
+
+{% block head %}<meta http-equiv="refresh" content="300">{% endblock %}
+{% block title %}Dashboard · homebase{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Dashboard</h1>
+  <p class="muted">{{ today|date:"l j F Y" }}</p>
+</div>
+
+{% if monitor.stalled %}
+  <div class="banner banner-bad" role="alert">
+    {% if monitor.last_check_at %}
+      <strong>The monitor has not run since {{ monitor.last_check_at|date:"Y-m-d H:i" }}</strong> ({{ monitor.last_check_at|naturaltime }}).
+    {% else %}
+      <strong>No uptime check has run yet.</strong>
+    {% endif %}
+    Uptime, provider data, and alert email are stale until it runs again. Check the <code>checker</code> service: <code>docker compose logs checker</code>.
+  </div>
+{% endif %}
+
+<section class="card" id="alerts">
+  <div class="card-head">
+    <h2>Alerts</h2>
+    <p class="muted small">
+      {% if email_enabled %}Email goes to {{ email_to|join:", " }}{% elif demo_mode %}Email is off in the demo{% else %}Email is off: set <code>EMAIL_HOST</code> and <code>HOMEBASE_ALERT_EMAIL_TO</code> to turn it on{% endif %}
+    </p>
+  </div>
+  {% if email_error %}
+    <p class="card-note text-bad">Alert email failed: {{ email_error }}. It is retried on every monitor run.</p>
+  {% endif %}
+  {% if alerts %}
+    <ul class="alert-list">
+      {% for alert, raised_at in alerts %}
+        <li class="alert-item{% if alert.critical %} alert-critical{% endif %}">
+          <span class="badge {% if alert.critical %}badge-bad{% else %}badge-warn{% endif %}">{% if alert.critical %}Critical{% else %}Warning{% endif %}</span>
+          {% admin_link alert.link alert.title "alert-title" %}
+          {% if raised_at %}<span class="muted small nowrap" title="{{ raised_at|date:'Y-m-d H:i' }}">since {{ raised_at|naturaltime }}</span>{% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty all-clear"><span class="dot dot-ok" aria-hidden="true"></span>No current alerts.</p>
+  {% endif %}
+</section>
+
+<section class="stats" aria-label="Summary">
+  <div class="stat">
+    <span class="stat-value">{{ counts.domains }}</span>
+    <span class="stat-label">Domains</span>
+  </div>
+  <div class="stat">
+    <span class="stat-value">{{ counts.subscriptions }}</span>
+    <span class="stat-label">Active subscriptions</span>
+  </div>
+  <div class="stat">
+    <span class="stat-value">{{ counts.servers }}</span>
+    <span class="stat-label">Servers</span>
+  </div>
+  <div class="stat">
+    <span class="stat-value">{{ counts.apps }}</span>
+    <span class="stat-label">Apps{% if apps_down %} · <span class="text-bad">{{ apps_down }} down</span>{% endif %}</span>
+  </div>
+  <div class="stat">
+    <span class="stat-value">{{ counts.providers }}</span>
+    <span class="stat-label">Providers</span>
+  </div>
+</section>
+
+<section class="card" id="apps">
+  <div class="card-head">
+    <h2>Apps</h2>
+    <p class="muted">
+      Uptime from the monitor{% if monitor.last_check_at %}, last check {{ monitor.last_check_at|naturaltime }}{% endif %}
+    </p>
+  </div>
+  {% if apps %}
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>App</th>
+            <th>Now</th>
+            <th>Last 24 hours</th>
+            <th class="num">Uptime 24 h</th>
+            <th>TLS</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for app in apps %}
+            <tr>
+              <td>
+                <a class="app-name" href="{% url 'app_detail' app.pk %}">{{ app.name }}</a>
+                {% if app.status != "live" %}<span class="kind">{{ app.get_status_display }}</span>{% endif %}
+                <span class="cell-sub muted small">
+                  {% if app.url and not demo_mode %}<a class="mono" href="{{ app.url }}" rel="noopener noreferrer" target="_blank">{{ app.hostname|default:app.url }}</a>{% elif app.url %}<span class="mono">{{ app.hostname|default:app.url }}</span>{% else %}<span class="mono">{{ app.hostname|default:"No address" }}</span>{% endif %}{% if app.server %} · {{ app.server }}{% endif %}
+                </span>
+              </td>
+              <td>
+                {% if not app.url %}
+                  <span class="badge">No URL</span>
+                {% elif app.last_check_ok is None %}
+                  <span class="badge">Not checked</span>
+                {% else %}
+                  {% if app.last_check_ok %}
+                    <span class="badge badge-ok">Up</span>
+                    <span class="muted small nowrap">{{ app.last_check_status_code }} · {{ app.last_check_response_ms }} ms</span>
+                  {% else %}
+                    <span class="badge badge-bad">Down</span>
+                    {% if app.down_for %}<span class="muted small nowrap">for {{ app.down_for }}</span>{% endif %}
+                    <span class="cell-sub text-bad-soft small">{{ app.last_check_error }}</span>
+                  {% endif %}
+                  <span class="cell-sub muted small nowrap" title="{{ app.last_checked_at|date:'Y-m-d H:i:s' }}">checked {{ app.last_checked_at|naturaltime }}</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if app.url %}
+                  <a class="strip" href="{% url 'app_detail' app.pk %}" aria-label="Uptime history of {{ app.name }}">
+                    {% for bucket in app.strip %}<span class="cell cell-{{ bucket.state }}" title="{{ bucket.label }}"></span>{% endfor %}
+                  </a>
+                {% else %}-{% endif %}
+              </td>
+              <td class="num nowrap">
+                {% if app.uptime_day is None %}-{% else %}{{ app.uptime_day|floatformat:"-2" }}%{% endif %}
+                {% if app.uptime_week is not None %}<span class="cell-sub muted small">7 days: {{ app.uptime_week|floatformat:"-2" }}%</span>{% endif %}
+              </td>
+              <td class="nowrap">
+                {% if app.tls_days_left is None or not app.url %}-
+                {% elif app.tls_days_left < 3 %}<span class="badge badge-bad" title="Expires {{ app.last_check_tls_expires_at|date:'Y-m-d H:i' }}">{% if app.tls_days_left < 0 %}Expired{% else %}{{ app.tls_days_left }} d{% endif %}</span>
+                {% elif app.tls_days_left <= tls_alert_days %}<span class="badge badge-warn" title="Expires {{ app.last_check_tls_expires_at|date:'Y-m-d H:i' }}">{{ app.tls_days_left }} d</span>
+                {% else %}<span title="Expires {{ app.last_check_tls_expires_at|date:'Y-m-d H:i' }}">{{ app.tls_days_left }} d</span>{% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="legend muted small">
+      <span class="legend-item"><span class="cell cell-up"></span> up</span> <span class="legend-item"><span class="cell cell-partial"></span> some checks failed</span> <span class="legend-item"><span class="cell cell-down"></span> down</span> <span class="legend-item"><span class="cell cell-none"></span> no checks</span> <span class="legend-item">· one cell per hour</span>
+    </p>
+  {% else %}
+    <p class="empty">No apps yet.{% if not demo_mode %} <a href="{% url 'admin:inventory_app_add' %}">Add one</a>.{% endif %}</p>
+  {% endif %}
+</section>
+
+<section class="card" id="renewals">
+  <div class="card-head">
+    <h2>Renewals and expiries</h2>
+    <p class="muted">
+      Next {{ window_days }} days{% if overdue_count %} · <span class="text-bad">{{ overdue_count }} overdue</span>{% endif %}
+    </p>
+  </div>
+  {% if renewals %}
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Due</th>
+            <th>When</th>
+            <th>Item</th>
+            <th>Provider</th>
+            <th>Auto-renew</th>
+            <th class="num">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in renewals %}
+            <tr class="{% if r.overdue %}row-overdue{% elif r.soon %}row-soon{% endif %}">
+              <td class="nowrap">{{ r.due|date:"Y-m-d" }}</td>
+              <td class="nowrap">
+                {% if r.overdue %}<span class="badge badge-bad">{{ r.due_label }}</span>
+                {% elif r.soon %}<span class="badge badge-warn">{{ r.due_label }}</span>
+                {% else %}{{ r.due_label }}{% endif %}
+              </td>
+              <td><span class="kind">{{ r.kind }}</span> {% admin_link r.admin_url r.name %}</td>
+              <td>{{ r.provider }}</td>
+              <td>{% if r.auto_renew %}Yes{% else %}<span class="text-warn">No</span>{% endif %}</td>
+              <td class="num nowrap">{{ r.amount|default:"-" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="empty">Nothing renews or expires in the next {{ window_days }} days.</p>
+  {% endif %}
+</section>
+
+<section class="card" id="domains">
+  <div class="card-head">
+    <h2>Domains</h2>
+    <p class="muted">Registrar and DNS status from the last provider sync</p>
+  </div>
+  {% if domains %}
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Domain</th>
+            <th>Registrar</th>
+            <th>Expires</th>
+            <th>Auto-renew</th>
+            <th>DNS</th>
+            <th class="num">DNS records</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for domain in domains %}
+            <tr>
+              <td class="nowrap">{% url 'admin:inventory_domain_change' domain.pk as domain_url %}{% admin_link domain_url domain.name %}</td>
+              <td class="nowrap">
+                {{ domain.registrar }}
+                {% live_status domain.registrar_status quiet=True %}
+              </td>
+              <td class="nowrap">{{ domain.expires_on|date:"Y-m-d" }}</td>
+              <td>{% if domain.auto_renew %}Yes{% else %}<span class="text-warn">No</span>{% endif %}</td>
+              <td class="nowrap">
+                {% if domain.dns_provider %}{{ domain.dns_provider }}{% elif domain.dns_zone_status %}Cloudflare{% else %}At registrar{% endif %}
+                {% live_status domain.dns_zone_status quiet=True %}
+              </td>
+              <td class="num">
+                {% if domain.record_count %}{% url 'admin:inventory_dnsrecord_changelist' as records_url %}{% admin_link records_url domain.record_count domain__id__exact=domain.pk %}{% else %}-{% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="empty">No domains yet.{% if not demo_mode %} <a href="{% url 'admin:inventory_domain_add' %}">Add one</a>, or configure the GoDaddy sync.{% endif %}</p>
+  {% endif %}
+</section>
+
+<section class="card" id="servers">
+  <div class="card-head">
+    <h2>Servers</h2>
+    <p class="muted">Status from the last provider sync</p>
+  </div>
+  {% if servers %}
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Kind</th>
+            <th>Provider</th>
+            <th>Status</th>
+            <th>Host</th>
+            <th>Location</th>
+            <th class="num">Per month</th>
+            <th class="num">Apps</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for server in servers %}
+            <tr>
+              <td class="nowrap">{% url 'admin:inventory_server_change' server.pk as server_url %}{% admin_link server_url server.name %}</td>
+              <td>{{ server.get_kind_display }}</td>
+              <td>{{ server.provider|default:"-" }}</td>
+              <td class="nowrap">
+                {% if server.live_status %}{% live_status server.live_status server.provider %}{% else %}-{% endif %}
+              </td>
+              <td class="mono">{{ server.host|default:"-" }}</td>
+              <td>{{ server.location|default:"-" }}</td>
+              <td class="num nowrap">{{ server.monthly_costs|join:", "|default:"-" }}</td>
+              <td class="num">{{ server.app_count }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="empty">No servers yet.{% if not demo_mode %} <a href="{% url 'admin:inventory_server_add' %}">Add one</a>.{% endif %}</p>
+  {% endif %}
+  {% if tunnels %}
+    <div class="card-subhead"><h3>Cloudflare Tunnels</h3></div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Tunnel</th>
+            <th>Status</th>
+            <th>Since</th>
+            <th>Runs on</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for tunnel in tunnels %}
+            <tr>
+              <td class="nowrap">{% url 'admin:inventory_tunnel_change' tunnel.pk as tunnel_url %}{% admin_link tunnel_url tunnel.name %}</td>
+              <td>{% live_status tunnel.status tunnel.provider %}</td>
+              <td class="nowrap">{% if tunnel.status_changed_at %}<span title="{{ tunnel.status_changed_at|date:'Y-m-d H:i' }}">{{ tunnel.status_changed_at|naturaltime }}</span>{% else %}-{% endif %}</td>
+              <td>{{ tunnel.server|default:"-" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</section>
+
+<section class="card" id="costs">
+  <div class="card-head">
+    <h2>Costs</h2>
+    <p class="muted">Active subscriptions, normalised by billing cycle</p>
+  </div>
+  {% if cost_totals %}
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Currency</th>
+            <th class="num">Subscriptions</th>
+            <th class="num">Per month</th>
+            <th class="num">Per year</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for total in cost_totals %}
+            <tr>
+              <td>{{ total.currency }}</td>
+              <td class="num">{{ total.subscriptions }}</td>
+              <td class="num">{{ total.monthly }}</td>
+              <td class="num">{{ total.yearly }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="empty">No active subscriptions yet.{% if not demo_mode %} <a href="{% url 'admin:inventory_subscription_add' %}">Add one</a>.{% endif %}</p>
+  {% endif %}
+</section>
+
+<section class="card" id="providers">
+  <div class="card-head">
+    <h2>Provider sync</h2>
+    <p class="muted">Read-only API sync every {{ sync_interval }} minutes</p>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Provider</th>
+          <th>State</th>
+          <th>Last good sync</th>
+          <th>Result</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in providers %}
+          <tr>
+            <td class="nowrap">{% if row.provider %}{% url 'admin:inventory_provider_change' row.provider.pk as provider_url %}{% admin_link provider_url row.label %}{% else %}{{ row.label }}{% endif %}</td>
+            <td class="nowrap"><span class="badge {{ row.badge.0 }}">{{ row.badge.1 }}</span></td>
+            <td class="nowrap">
+              {% if row.provider.sync_succeeded_at %}<span title="{{ row.provider.sync_succeeded_at|date:'Y-m-d H:i:s' }}">{{ row.provider.sync_succeeded_at|naturaltime }}</span>{% else %}-{% endif %}
+            </td>
+            <td class="small">
+              {% if row.state == "off" %}<span class="muted">Set <code>{{ row.token_setting }}</code> to turn it on</span>
+              {% elif row.state == "failing" %}<span class="text-bad">{{ row.provider.sync_error }}</span> <span class="muted nowrap">· tried {{ row.provider.sync_attempted_at|naturaltime }}</span>
+              {% elif row.state == "pending" %}<span class="muted">Syncs on the next monitor run</span>
+              {% else %}{{ row.provider.sync_summary }}{% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

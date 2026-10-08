@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block head %}<meta http-equiv="refresh" content="300">{% endblock %}
+{% block title %}{{ app.name }} · homebase{% endblock %}
+
+{% block content %}
+<p class="breadcrumb"><a href="{% url 'dashboard' %}#apps">Dashboard</a> / Apps</p>
+<div class="page-head">
+  <h1>{{ app.name }}</h1>
+  <p class="muted">
+    {{ app.get_status_display }}{% if app.server %} · {{ app.server }}{% endif %}
+    {% if app.repo_url and not demo_mode %} · <a href="{{ app.repo_url }}" rel="noopener noreferrer" target="_blank">Repository</a>{% endif %}
+    {% if user.is_staff and not demo_mode %} · <a href="{% url 'admin:inventory_app_change' app.pk %}">Edit</a>{% endif %}
+  </p>
+</div>
+
+{% if not app.url %}
+  <section class="card"><p class="empty">This app has no URL, so it is not checked.</p></section>
+{% else %}
+  {# The demo's apps are fictional, so their addresses are not links. #}
+  <p class="mono app-url">{% if demo_mode %}{{ app.url }}{% else %}<a href="{{ app.url }}" rel="noopener noreferrer" target="_blank">{{ app.url }}</a>{% endif %}</p>
+
+  <section class="stats" aria-label="Uptime summary">
+    <div class="stat">
+      <span class="stat-value">
+        {% if app.last_check_ok is None %}<span class="muted">-</span>
+        {% elif app.last_check_ok %}<span class="text-ok">Up</span>
+        {% else %}<span class="text-bad">Down</span>{% endif %}
+      </span>
+      <span class="stat-label">
+        {% if app.last_check_ok is None %}Not checked yet
+        {% elif app.last_check_ok %}{{ app.last_check_status_code }} · {{ app.last_check_response_ms }} ms, {{ app.last_checked_at|naturaltime }}
+        {% else %}{% if down_for %}For {{ down_for }} · {% endif %}{{ app.last_check_error }}{% endif %}
+      </span>
+    </div>
+    {% for days, percent in uptime.items %}
+      <div class="stat">
+        <span class="stat-value">{% if percent is None %}-{% else %}{{ percent|floatformat:"-2" }}%{% endif %}</span>
+        <span class="stat-label">Uptime, {% if days == 1 %}24 hours{% else %}{{ days }} days{% endif %}</span>
+      </div>
+    {% endfor %}
+    <div class="stat">
+      <span class="stat-value">{% if average_ms is None %}-{% else %}{{ average_ms|floatformat:"0" }} ms{% endif %}</span>
+      <span class="stat-label">Average response, 24 h</span>
+    </div>
+    <div class="stat">
+      <span class="stat-value">
+        {% if tls_days_left is None %}-
+        {% elif tls_days_left < 0 %}<span class="text-bad">Expired</span>
+        {% elif tls_days_left < 3 %}<span class="text-bad">{{ tls_days_left }} d</span>
+        {% elif tls_days_left <= tls_alert_days %}<span class="text-warn">{{ tls_days_left }} d</span>
+        {% else %}{{ tls_days_left }} d{% endif %}
+      </span>
+      <span class="stat-label">{% if app.last_check_tls_expires_at %}TLS expires <span class="nowrap">{{ app.last_check_tls_expires_at|date:"Y-m-d" }}</span>{% else %}TLS certificate{% endif %}</span>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>Last 7 days</h2>
+      <p class="muted small">One cell per hour; hover a cell for its checks</p>
+    </div>
+    <div class="week">
+      {% for day, buckets in days %}
+        <div class="week-row week-head" aria-hidden="true">
+          <span class="week-day"></span>
+          <span class="strip strip-wide">
+            {% for bucket in buckets %}<span class="cell cell-label">{% if bucket.start|date:"H"|divisibleby:6 %}{{ bucket.start|date:"H:i" }}{% endif %}</span>{% endfor %}
+          </span>
+        </div>
+        <div class="week-row">
+          <span class="week-day">{{ day|date:"D j M" }}</span>
+          <span class="strip strip-wide">
+            {% for bucket in buckets %}<span class="cell cell-{{ bucket.state }}" title="{{ bucket.label }}"></span>{% endfor %}
+          </span>
+        </div>
+      {% endfor %}
+    </div>
+    <p class="legend muted small">
+      <span class="legend-item"><span class="cell cell-up"></span> up</span> <span class="legend-item"><span class="cell cell-partial"></span> some checks failed</span> <span class="legend-item"><span class="cell cell-down"></span> down</span> <span class="legend-item"><span class="cell cell-none"></span> no checks</span>
+    </p>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>Outages</h2>
+      <p class="muted">Last {{ outage_days }} days</p>
+    </div>
+    {% if outages %}
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Started</th>
+              <th>Ended</th>
+              <th class="num">Duration</th>
+              <th class="num">Failed checks</th>
+              <th>First error</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for outage, length in outages %}
+              <tr class="{% if not outage.ended_at %}row-overdue{% endif %}">
+                <td class="nowrap">{{ outage.started_at|date:"Y-m-d H:i" }}</td>
+                <td class="nowrap">{% if outage.ended_at %}{{ outage.ended_at|date:"Y-m-d H:i" }}{% else %}<span class="badge badge-bad">Ongoing</span>{% endif %}</td>
+                <td class="num nowrap">{{ length }}</td>
+                <td class="num">{{ outage.checks }}</td>
+                <td>{{ outage.error }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="empty">No failed checks in the last {{ outage_days }} days.</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>Recent checks</h2>
+      <p class="muted">Newest first · history is kept for {{ history_days }} days</p>
+    </div>
+    {% if checks %}
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Checked</th>
+              <th>Result</th>
+              <th class="num">HTTP</th>
+              <th class="num">Response</th>
+              <th>Error</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for check in checks %}
+              <tr>
+                <td class="nowrap">{{ check.checked_at|date:"Y-m-d H:i:s" }}</td>
+                <td>{% if check.ok %}<span class="badge badge-ok">Up</span>{% else %}<span class="badge badge-bad">Down</span>{% endif %}</td>
+                <td class="num">{{ check.status_code|default:"-" }}</td>
+                <td class="num nowrap">{% if check.response_ms is None %}-{% else %}{{ check.response_ms }} ms{% endif %}</td>
+                <td>{{ check.error|default:"-" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="empty">No checks of this URL yet.</p>
+    {% endif %}
+  </section>
+{% endif %}
+{% endblock %}

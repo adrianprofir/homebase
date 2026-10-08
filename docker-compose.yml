@@ -1,0 +1,63 @@
+# homebase on the home server: Django (gunicorn) + Postgres + a monitor that checks apps,
+# syncs provider APIs, and sends alerts.
+# Private by design: the dashboard port binds to HOMEBASE_BIND_ADDRESS (a LAN address or
+# 127.0.0.1) and Postgres publishes no port at all. Do not forward this port to the internet.
+
+x-app-env: &app-env
+  DATABASE_URL: postgres://${POSTGRES_USER:?set POSTGRES_USER in .env}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:?set POSTGRES_DB in .env}
+
+x-app: &app
+  build: .
+  image: homebase:latest
+  restart: unless-stopped
+  env_file: .env
+  environment: *app-env
+
+services:
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    <<: *app
+    environment:
+      <<: *app-env
+      RUN_MIGRATIONS: "1"
+    ports:
+      - "${HOMEBASE_BIND_ADDRESS:-127.0.0.1}:${HOMEBASE_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      # /healthz checks the database too, and answers whatever ALLOWED_HOSTS lists.
+      # Gunicorn only listens once migrations have finished.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+
+  checker:
+    <<: *app
+    command:
+      - sh
+      - -c
+      - while true; do python manage.py monitor; sleep "$${CHECK_INTERVAL_SECONDS:-300}"; done
+    init: true
+    depends_on:
+      web:
+        condition: service_healthy
+
+volumes:
+  pgdata:

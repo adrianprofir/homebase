@@ -1,0 +1,126 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: homebase
+          POSTGRES_USER: homebase
+          POSTGRES_PASSWORD: homebase
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U homebase -d homebase"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      SECRET_KEY: ci-only-not-secret
+      DATABASE_URL: postgres://homebase:homebase@localhost:5432/homebase
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+      - name: Install dependencies
+        run: uv sync --locked
+      - name: Check formatting
+        run: uv run ruff format --check .
+      - name: Lint
+        run: uv run ruff check .
+      - name: Check for missing migrations
+        run: uv run python manage.py makemigrations --check --dry-run
+      - name: Run tests
+        run: uv run pytest
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate Compose file
+        run: cp .env.example .env && docker compose config --quiet
+      - name: Build and start the stack
+        run: docker compose up --build --detach --wait --wait-timeout 180
+      - name: Smoke test
+        run: |
+          curl --fail --silent --show-error http://127.0.0.1:8000/healthz | grep -qx ok
+          curl --fail --silent --show-error http://127.0.0.1:8000/accounts/login/ | grep -q "Log in"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8000/)" = 302
+          docker compose exec -T web python manage.py check_apps
+          docker compose exec -T web python manage.py monitor
+      - name: Demo mode smoke test
+        run: |
+          docker compose exec -T web python manage.py seed_demo
+          sed -i 's/^DEMO_MODE=.*/DEMO_MODE=true/' .env
+          docker compose up --detach --wait --wait-timeout 180
+          curl --fail --silent --show-error http://127.0.0.1:8000/ | grep -q "Everything here is fictional"
+          docker compose exec -T web python manage.py monitor
+      - name: Show logs
+        if: failure()
+        run: docker compose logs
+
+  demo-stack:
+    runs-on: ubuntu-latest
+    env:
+      DEMO_EDGE_NETWORK: ci-edge
+    defaults:
+      run:
+        working-directory: deploy/demo
+    steps:
+      - uses: actions/checkout@v7
+      - name: Configure the demo stack
+        run: |
+          cp .env.demo.example .env
+          sed -i "s/^SECRET_KEY=.*/SECRET_KEY=ci-only-not-secret/;s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci-only-not-secret/;s/^DEMO_EDGE_NETWORK=.*/DEMO_EDGE_NETWORK=$DEMO_EDGE_NETWORK/" .env
+          docker compose config --quiet
+      - name: Reject tokens and mail settings in the example
+        run: "! grep -E '^(CLOUDFLARE|GODADDY|DIGITALOCEAN|HOSTINGER)_.*=.+|^EMAIL_HOST=.+' .env.demo.example"
+      - run: docker network create "$DEMO_EDGE_NETWORK"
+      - name: Start a decoy answering to web on the edge network
+        # In production other stacks share the edge network, and their web containers
+        # answer to the name web there. The demo must still be reached by its own alias.
+        run: >-
+          docker run -d --name decoy-web --network "$DEMO_EDGE_NETWORK" --network-alias web
+          caddy:2-alpine caddy respond --listen :8000 --status 400 --body "decoy web on the edge network"
+      - name: Start the demo stack
+        run: docker compose up -d --build --wait --wait-timeout 300
+      - name: Alias routes to homebase, not the decoy
+        run: ./smoke-test.sh
+      - name: A restart keeps the data and a reset works
+        run: |
+          docker compose restart homebase-web
+          docker compose up -d --wait --wait-timeout 120
+          docker compose logs homebase-web | grep -q "already has data"
+          docker compose exec -T checker python manage.py seed_demo --reset
+          ./smoke-test.sh
+      - name: Show logs
+        if: failure()
+        run: docker compose logs
+      - name: Stop
+        if: always()
+        run: |
+          docker compose down -v
+          docker rm -f decoy-web
+
+  gitleaks:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Scan for committed secrets
+        uses: gitleaks/gitleaks-action@v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

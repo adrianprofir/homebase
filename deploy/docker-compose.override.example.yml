@@ -1,0 +1,26 @@
+# Home-server additions to docker-compose.yml. Copy to docker-compose.override.yml in the
+# stack directory, where `docker compose` loads it automatically, and set
+# HOMEBASE_TAILSCALE_ADDRESS and HOMEBASE_BACKUP_DIR in .env.
+#
+# tailscale: publishes the dashboard on the Tailscale address as well as the LAN address.
+#   It is a separate host-network forwarder instead of a second port binding on `web`,
+#   because Docker does not wait for tailscaled at boot: a failed bind on the Tailscale
+#   address would stop `web` from starting at all, LAN included, and Docker does not retry
+#   it. socat exits until the address exists and the restart policy retries it, so the
+#   LAN listener never depends on Tailscale. docs/deploy-home-server.md ("Why Tailscale
+#   goes through a forwarder") has the test behind this.
+# db: mounts the directory deploy/backup.sh writes its nightly dumps to.
+services:
+  tailscale:
+    image: alpine/socat:1.8.0.3
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - TCP-LISTEN:${HOMEBASE_PORT:-8000},bind=${HOMEBASE_TAILSCALE_ADDRESS:?set HOMEBASE_TAILSCALE_ADDRESS in .env},fork,reuseaddr,backlog=128
+      - TCP:${HOMEBASE_BIND_ADDRESS:?set HOMEBASE_BIND_ADDRESS in .env}:${HOMEBASE_PORT:-8000}
+    depends_on:
+      - web
+
+  db:
+    volumes:
+      - ${HOMEBASE_BACKUP_DIR:?set HOMEBASE_BACKUP_DIR in .env}:/backups

@@ -1,0 +1,55 @@
+[project]
+name = "homebase"
+version = "0.1.0"
+description = "Self-hosted CMDB and status dashboard for your domains, subscriptions, servers, and apps."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Adrian Profir" }]
+keywords = ["self-hosted", "homelab", "cmdb", "dashboard", "django", "postgresql"]
+classifiers = [
+    "Framework :: Django",
+    "Intended Audience :: System Administrators",
+    "Programming Language :: Python :: 3.14",
+    "Private :: Do Not Upload",
+]
+requires-python = ">=3.14"
+dependencies = [
+    "django>=6.1,<6.2",
+    "django-environ>=0.14",
+    "gunicorn>=26.2",
+    "httpx>=0.28",
+    "psycopg[binary]>=3.3",
+    "whitenoise>=6.12",
+]
+
+[project.urls]
+Homepage = "https://github.com/adrianprofir/homebase"
+Issues = "https://github.com/adrianprofir/homebase/issues"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1",
+    "pytest-django>=4.14",
+    "ruff>=0.16",
+    "trustme>=1.2",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "homebase.settings"
+python_files = ["test_*.py"]
+addopts = "--strict-markers"
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+extend-exclude = ["*/migrations/*"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "DJ", "S", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+"*/tests/*" = ["S101", "S105", "S106"]

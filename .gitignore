@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Django
+*.log
+local_settings.py
+db.sqlite3
+media/
+staticfiles/
+
+# Secrets and environment
+.env
+.env.*
+!.env.example
+!.env.demo.example
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+
+# Home-server stack files (see docs/deploy-home-server.md)
+docker-compose.override.yml
+ADMIN_CREDENTIALS
+BACKUP_FAILED
+DEPLOYED_COMMIT
