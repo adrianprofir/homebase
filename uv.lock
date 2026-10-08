@@ -232,7 +232,7 @@ requires-dist = [
     { name = "django-environ", specifier = ">=0.14" },
     { name = "gunicorn", specifier = ">=26.2" },
     { name = "httpx", specifier = ">=0.28" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.3" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.3.6" },
     { name = "whitenoise", specifier = ">=6.12" },
 ]
 
