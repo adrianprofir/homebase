@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% load humanize homebase %}
+{% load humanize homebase static %}
 
-{% block head %}<meta http-equiv="refresh" content="300">{% endblock %}
+{% block head %}<script src="{% static 'js/dashboard-refresh.js' %}" defer data-refresh-seconds="300"></script>{% endblock %}
 {% block title %}Dashboard · homebase{% endblock %}
 
 {% block content %}
@@ -128,7 +128,7 @@
               </td>
               <td class="nowrap">
                 {% if app.tls_days_left is None or not app.url %}-
-                {% elif app.tls_days_left < 3 %}<span class="badge badge-bad" title="Expires {{ app.last_check_tls_expires_at|date:'Y-m-d H:i' }}">{% if app.tls_days_left < 0 %}Expired{% else %}{{ app.tls_days_left }} d{% endif %}</span>
+                {% elif app.tls_days_left <= tls_critical_days %}<span class="badge badge-bad" title="Expires {{ app.last_check_tls_expires_at|date:'Y-m-d H:i' }}">{% if app.tls_days_left < 0 %}Expired{% else %}{{ app.tls_days_left }} d{% endif %}</span>
                 {% elif app.tls_days_left <= tls_alert_days %}<span class="badge badge-warn" title="Expires {{ app.last_check_tls_expires_at|date:'Y-m-d H:i' }}">{{ app.tls_days_left }} d</span>
                 {% else %}<span title="Expires {{ app.last_check_tls_expires_at|date:'Y-m-d H:i' }}">{{ app.tls_days_left }} d</span>{% endif %}
               </td>

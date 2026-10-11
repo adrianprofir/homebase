@@ -130,6 +130,11 @@ class TestAppAlerts:
     def test_tls_expiry_thresholds_for_live_https_apps(self):
         now = timezone.now()
         App.objects.create(
+            name="critical",
+            url="https://critical.example",
+            last_check_tls_expires_at=now + timedelta(days=3, hours=1),
+        )
+        App.objects.create(
             name="soon",
             url="https://soon.example",
             last_check_tls_expires_at=now + timedelta(days=9, hours=1),
@@ -154,10 +159,11 @@ class TestAppAlerts:
         alerts = current_alerts(now)
 
         assert [(a.title.split(" ")[3], a.severity) for a in alerts] == [
+            ("critical", "critical"),
             ("urgent", "critical"),
             ("soon", "warning"),
         ]
-        assert alerts[1].title.startswith("TLS certificate of soon expires in 9 days")
+        assert alerts[2].title.startswith("TLS certificate of soon expires in 9 days")
 
     def test_expired_certificate(self):
         now = timezone.now()
