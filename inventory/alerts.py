@@ -12,7 +12,7 @@ import logging
 import math
 from dataclasses import dataclass
 from datetime import timedelta
-from urllib.error import HTTPError, URLError
+from urllib.error import HTTPError
 from urllib.parse import urljoin
 from urllib.request import Request, urlopen
 
@@ -30,7 +30,18 @@ logger = logging.getLogger("homebase.alerts")
 CRITICAL_DAYS = 7
 TLS_CRITICAL_DAYS = 3
 RESOLVED_ALERT_RETENTION_DAYS = 90
+NTFY_MAX_MESSAGE_BYTES = 4096
 RANK = {"": 0, Alert.Severity.WARNING: 1, Alert.Severity.CRITICAL: 2}
+CHANNELS = (
+    ("email", "HOMEBASE_ALERT_EMAIL_ENABLED", "emailed_severity", "resolution_emailed"),
+    ("ntfy", "HOMEBASE_ALERT_NTFY_ENABLED", "ntfy_emailed_severity", "ntfy_resolution_emailed"),
+    (
+        "webhook",
+        "HOMEBASE_ALERT_WEBHOOK_ENABLED",
+        "webhook_emailed_severity",
+        "webhook_resolution_emailed",
+    ),
+)
 
 
 @dataclass(frozen=True)
@@ -235,7 +246,7 @@ def update_alerts(now=None):
     cleared = [alert for key, alert in open_alerts.items() if key not in current]
     for alert in cleared:
         alert.resolved_at = now
-        if not alert.emailed_severity:
+        if not _any_channel_notified(alert):
             alert.email_error = ""
         alert.save(update_fields=["resolved_at", "email_error"])
         logger.info("alert resolved: %s", alert.title)
@@ -255,103 +266,161 @@ def alert_delivery_enabled():
 
 
 def pending_email_alerts():
+    """Alerts still waiting on at least one configured delivery channel."""
+    combined = Alert.objects.none()
+    for _name, enabled_setting, severity_field, resolution_field in CHANNELS:
+        if getattr(settings, enabled_setting):
+            combined = combined | _pending_for_channel(severity_field, resolution_field)
+    return combined.distinct()
+
+
+def _pending_for_channel(severity_field, resolution_field):
     escalated = Q()
     for severity, rank in RANK.items():
         if rank:
             escalated |= Q(
                 severity=severity,
-                emailed_severity__in=[sent for sent, sent_rank in RANK.items() if sent_rank < rank],
+                **{
+                    f"{severity_field}__in": [
+                        sent for sent, sent_rank in RANK.items() if sent_rank < rank
+                    ]
+                },
             )
     return Alert.objects.filter(
         (Q(resolved_at=None) & escalated)
-        | (Q(resolved_at__isnull=False, resolution_emailed=False) & ~Q(emailed_severity=""))
+        | (
+            Q(resolved_at__isnull=False, **{resolution_field: False})
+            & ~Q(**{severity_field: ""})
+        )
     )
+
+
+def _any_channel_notified(alert):
+    for _name, enabled_setting, severity_field, _resolution_field in CHANNELS:
+        if getattr(settings, enabled_setting) and getattr(alert, severity_field):
+            return True
+    return False
+
+
+def _channel_pending(alert, severity_field, resolution_field):
+    if alert.resolved_at is None:
+        sent_rank = RANK.get(getattr(alert, severity_field), 0)
+        return RANK[alert.severity] > sent_rank
+    if not getattr(alert, severity_field):
+        return False
+    return not getattr(alert, resolution_field)
+
+
+def _alert_fully_delivered(alert):
+    for _name, enabled_setting, severity_field, resolution_field in CHANNELS:
+        if not getattr(settings, enabled_setting):
+            continue
+        if _channel_pending(alert, severity_field, resolution_field):
+            return False
+    return True
 
 
 def send_alert_email(now):
     """Notify new, escalated, and resolved alerts through every configured channel.
 
-    Returns "sent", "nothing to send", "off", or the error. A failed send is recorded on
-    the alerts, shown on the dashboard, and retried on the next run.
+    Returns "sent", "nothing to send", "off", or the error. Each channel tracks its own
+    delivery state so one failing channel does not re-send through the others.
     """
     if not alert_delivery_enabled():
         return "off"
-    pending = pending_email_alerts()
-    to_raise = list(pending.filter(resolved_at=None))
-    to_resolve = list(pending.filter(resolved_at__isnull=False))
-    if not to_raise and not to_resolve:
-        return "nothing to send"
-    subject = _subject(to_raise, to_resolve)
-    body = _body(to_raise, to_resolve)
-    involved = [alert.pk for alert in to_raise + to_resolve]
     errors = []
-    if settings.HOMEBASE_ALERT_EMAIL_ENABLED:
+    any_work = False
+    any_sent = False
+    for name, enabled_setting, severity_field, resolution_field in CHANNELS:
+        if not getattr(settings, enabled_setting):
+            continue
+        pending = _pending_for_channel(severity_field, resolution_field)
+        to_raise = list(pending.filter(resolved_at=None))
+        to_resolve = list(pending.filter(resolved_at__isnull=False))
+        if not to_raise and not to_resolve:
+            continue
+        any_work = True
+        subject = _subject(to_raise, to_resolve)
+        body = _body(to_raise, to_resolve)
+        involved = to_raise + to_resolve
         try:
-            EmailMessage(
-                subject=subject,
-                body=body,
-                to=settings.HOMEBASE_ALERT_EMAIL_TO,
-            ).send()
+            if name == "email":
+                EmailMessage(
+                    subject=subject,
+                    body=body,
+                    to=settings.HOMEBASE_ALERT_EMAIL_TO,
+                ).send()
+            elif name == "ntfy":
+                _send_ntfy(subject, body)
+            else:
+                _send_webhook(subject, body, to_raise, to_resolve)
         except Exception as exc:
-            errors.append(f"email {type(exc).__name__}: {exc}")
-    if settings.HOMEBASE_ALERT_NTFY_ENABLED:
-        try:
-            _send_ntfy(subject, body)
-        except (HTTPError, URLError, OSError, ValueError) as exc:
-            errors.append(f"ntfy {type(exc).__name__}: {exc}")
-    if settings.HOMEBASE_ALERT_WEBHOOK_ENABLED:
-        try:
-            _send_webhook(subject, body, to_raise, to_resolve)
-        except (HTTPError, URLError, OSError, ValueError, TypeError) as exc:
-            errors.append(f"webhook {type(exc).__name__}: {exc}")
+            errors.append(f"{name} {type(exc).__name__}: {exc}")
+            stamp = f"{timezone.localtime(now):%Y-%m-%d %H:%M}"
+            for alert in involved:
+                alert.email_error = f"{stamp}: {errors[-1]}"[:255]
+                alert.save(update_fields=["email_error"])
+            continue
+        _mark_channel_delivered(to_raise, to_resolve, severity_field, resolution_field)
+        any_sent = True
+        if name == "email":
+            logger.info(
+                "alert email sent to %s: %d raised, %d resolved",
+                ", ".join(settings.HOMEBASE_ALERT_EMAIL_TO),
+                len(to_raise),
+                len(to_resolve),
+            )
+        elif name == "ntfy":
+            logger.info("alert ntfy sent: %d raised, %d resolved", len(to_raise), len(to_resolve))
+        else:
+            logger.info(
+                "alert webhook sent: %d raised, %d resolved", len(to_raise), len(to_resolve)
+            )
+    if not any_work:
+        return "nothing to send"
     if errors:
-        error = f"{timezone.localtime(now):%Y-%m-%d %H:%M}: {errors[0]}"[:255]
-        Alert.objects.filter(pk__in=involved).update(email_error=error)
-        logger.warning("alert delivery failed: %s", error)
-        return f"failed: {error}"
+        summary = "; ".join(errors)[:255]
+        logger.warning("alert delivery failed: %s", summary)
+        return f"failed: {summary}"
+    return "sent" if any_sent else "nothing to send"
+
+
+def _mark_channel_delivered(to_raise, to_resolve, severity_field, resolution_field):
     for alert in to_raise:
-        alert.emailed_severity = alert.severity
-        alert.email_error = ""
-        alert.save(update_fields=["emailed_severity", "email_error"])
-    Alert.objects.filter(pk__in=[alert.pk for alert in to_resolve]).update(
-        resolution_emailed=True, email_error=""
-    )
-    if settings.HOMEBASE_ALERT_EMAIL_ENABLED:
-        logger.info(
-            "alert email sent to %s: %d raised, %d resolved",
-            ", ".join(settings.HOMEBASE_ALERT_EMAIL_TO),
-            len(to_raise),
-            len(to_resolve),
-        )
-    if settings.HOMEBASE_ALERT_NTFY_ENABLED:
-        logger.info(
-            "alert ntfy sent to topic %s: %d raised, %d resolved",
-            settings.HOMEBASE_ALERT_NTFY_TOPIC,
-            len(to_raise),
-            len(to_resolve),
-        )
-    if settings.HOMEBASE_ALERT_WEBHOOK_ENABLED:
-        logger.info(
-            "alert webhook sent: %d raised, %d resolved",
-            len(to_raise),
-            len(to_resolve),
-        )
-    return "sent"
+        setattr(alert, severity_field, alert.severity)
+        if _alert_fully_delivered(alert):
+            alert.email_error = ""
+        alert.save(update_fields=[severity_field, "email_error"])
+    for alert in to_resolve:
+        setattr(alert, resolution_field, True)
+        if _alert_fully_delivered(alert):
+            alert.email_error = ""
+        alert.save(update_fields=[resolution_field, "email_error"])
 
 
 def _send_ntfy(subject, body):
     base = settings.HOMEBASE_ALERT_NTFY_SERVER.rstrip("/")
-    topic = settings.HOMEBASE_ALERT_NTFY_TOPIC.strip("/")
-    url = f"{base}/{topic}"
+    message = body
+    while len(message.encode("utf-8")) > NTFY_MAX_MESSAGE_BYTES:
+        message = message[:-1]
+    if len(message.encode("utf-8")) > NTFY_MAX_MESSAGE_BYTES - 3:
+        message = message[:-3] + "..."
+    payload = json.dumps(
+        {
+            "topic": settings.HOMEBASE_ALERT_NTFY_TOPIC.strip("/"),
+            "title": subject[:200],
+            "message": message,
+        }
+    ).encode()
     request = Request(  # noqa: S310
-        url,
-        data=body.encode(),
-        headers={"Title": subject[:200], "Content-Type": "text/plain; charset=utf-8"},
+        base,
+        data=payload,
+        headers={"Content-Type": "application/json"},
         method="POST",
     )
     with urlopen(request, timeout=30) as response:  # noqa: S310
         if response.status >= 400:
-            raise HTTPError(url, response.status, response.reason, response.headers, None)
+            raise HTTPError(base, response.status, response.reason, response.headers, None)
 
 
 def _send_webhook(subject, body, to_raise, to_resolve):
@@ -380,11 +449,15 @@ def _send_webhook(subject, body, to_raise, to_resolve):
 
 
 def _webhook_alert(alert):
+    link = alert.link
+    base = settings.HOMEBASE_DASHBOARD_URL
+    if base and link:
+        link = urljoin(base, link)
     return {
         "title": alert.title,
         "severity": alert.severity,
         "kind": alert.kind,
-        "link": alert.link,
+        "link": link,
     }
 
 

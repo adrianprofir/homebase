@@ -89,7 +89,6 @@ def dashboard(request):
         "email_enabled": settings.HOMEBASE_ALERT_EMAIL_ENABLED,
         "email_to": settings.HOMEBASE_ALERT_EMAIL_TO,
         "alert_ntfy_enabled": settings.HOMEBASE_ALERT_NTFY_ENABLED,
-        "alert_ntfy_topic": settings.HOMEBASE_ALERT_NTFY_TOPIC,
         "alert_webhook_enabled": settings.HOMEBASE_ALERT_WEBHOOK_ENABLED,
         "email_error": (
             pending_email_alerts()

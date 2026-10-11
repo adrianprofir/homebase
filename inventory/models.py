@@ -388,6 +388,20 @@ class Alert(models.Model):
         help_text="The highest severity an email has gone out for.",
     )
     resolution_emailed = models.BooleanField(default=False)
+    ntfy_emailed_severity = models.CharField(
+        max_length=10,
+        choices=Severity,
+        blank=True,
+        help_text="The highest severity an ntfy notification has gone out for.",
+    )
+    ntfy_resolution_emailed = models.BooleanField(default=False)
+    webhook_emailed_severity = models.CharField(
+        max_length=10,
+        choices=Severity,
+        blank=True,
+        help_text="The highest severity a webhook notification has gone out for.",
+    )
+    webhook_resolution_emailed = models.BooleanField(default=False)
     email_error = models.CharField(max_length=255, blank=True)
 
     class Meta:

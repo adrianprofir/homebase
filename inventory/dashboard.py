@@ -178,5 +178,7 @@ def monitor_health(now):
         seen = [t for t in (last_check, heartbeat) if t is not None]
         last = max(seen) if seen else None
     else:
+        if heartbeat is None:
+            return MonitorHealth(last_check_at=None, stalled=False)
         last = heartbeat
     return MonitorHealth(last_check_at=last, stalled=last is None or now - last > allowed)

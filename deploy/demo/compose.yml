@@ -112,8 +112,12 @@ services:
     networks:
       - backend
     healthcheck:
-      # The loop touches a heartbeat file after every monitor run.
-      test: ["CMD-SHELL", "test -n \"$$(find /tmp/heartbeat -mmin -30 2>/dev/null)\""]
+      # Liveness only: the loop touches a file after each run (even if monitor failed).
+      test:
+        [
+          "CMD-SHELL",
+          "max=$$(( (3 * $${CHECK_INTERVAL_SECONDS:-300} + 60) / 60 + 1 )); test -n \"$$($$(find /tmp/heartbeat -mmin -$$max 2>/dev/null))\"",
+        ]
       interval: 60s
       timeout: 5s
       start_period: 90s

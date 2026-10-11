@@ -25,8 +25,8 @@
   <div class="card-head">
     <h2>Alerts</h2>
     <p class="muted small">
-      {% if email_enabled %}Email goes to {{ email_to|join:", " }}{% if alert_ntfy_enabled %}; ntfy topic <code>{{ alert_ntfy_topic }}</code>{% endif %}{% if alert_webhook_enabled %}; webhook configured{% endif %}
-      {% elif alert_ntfy_enabled or alert_webhook_enabled %}{% if alert_ntfy_enabled %}ntfy topic <code>{{ alert_ntfy_topic }}</code>{% endif %}{% if alert_ntfy_enabled and alert_webhook_enabled %}; {% endif %}{% if alert_webhook_enabled %}webhook configured{% endif %}
+      {% if email_enabled %}Email goes to {{ email_to|join:", " }}{% if alert_ntfy_enabled %}; ntfy configured{% endif %}{% if alert_webhook_enabled %}; webhook configured{% endif %}
+      {% elif alert_ntfy_enabled or alert_webhook_enabled %}{% if alert_ntfy_enabled %}ntfy configured{% endif %}{% if alert_ntfy_enabled and alert_webhook_enabled %}; {% endif %}{% if alert_webhook_enabled %}webhook configured{% endif %}
       {% elif demo_mode %}Alert delivery is off in the demo{% else %}Alerts are dashboard-only: set <code>EMAIL_HOST</code> and <code>HOMEBASE_ALERT_EMAIL_TO</code>, or <code>HOMEBASE_ALERT_NTFY_TOPIC</code>, or <code>HOMEBASE_ALERT_WEBHOOK_URL</code>{% endif %}
     </p>
   </div>

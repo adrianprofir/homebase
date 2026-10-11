@@ -423,6 +423,12 @@ class TestLiveDashboard:
 
         assert "The monitor has not run" not in content
 
+    def test_empty_inventory_without_heartbeat_has_no_monitor_banner(self, user_client):
+        content = user_client.get(reverse("dashboard")).content.decode()
+
+        assert "No uptime check has run yet" not in content
+        assert "The monitor has not run" not in content
+
     def test_uptime_columns(self, user_client):
         now = timezone.now()
         app = App.objects.create(

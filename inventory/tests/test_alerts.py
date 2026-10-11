@@ -459,9 +459,10 @@ class TestAlertEmail:
         assert update_alerts().email == "sent"
         assert len(calls) == 1
         request = calls[0]
-        assert request.full_url == "https://ntfy.example/homebase-alerts"
-        assert request.data
-        assert b"example.com expires in 3 days" in request.data
+        assert request.full_url == "https://ntfy.example"
+        payload = json.loads(request.data.decode())
+        assert payload["topic"] == "homebase-alerts"
+        assert "example.com expires in 3 days" in payload["message"]
 
     def test_webhook_posts_json(self, alert_settings, godaddy, monkeypatch):
         domain(godaddy, 3)
@@ -478,6 +479,7 @@ class TestAlertEmail:
         payload = json.loads(calls[0].data.decode())
         assert payload["subject"].startswith("[homebase]")
         assert payload["raised"][0]["title"].startswith("example.com expires")
+        assert payload["raised"][0]["link"].startswith("http://192.0.2.10:8090/")
 
     def test_failed_ntfy_is_recorded_and_retried(self, alert_settings, godaddy, monkeypatch):
         domain(godaddy, 3)
@@ -498,7 +500,42 @@ class TestAlertEmail:
         state["fail"] = False
         assert update_alerts().email == "sent"
         alert.refresh_from_db()
-        assert alert.emailed_severity == "critical"
+        assert alert.ntfy_emailed_severity == "critical"
+
+    def test_failing_ntfy_does_not_resend_email(self, email_on, godaddy, monkeypatch):
+        domain(godaddy, 3)
+        email_on.HOMEBASE_ALERT_NTFY_ENABLED = True
+        email_on.HOMEBASE_ALERT_NTFY_TOPIC = "homebase-alerts"
+        state = {"fail": True}
+
+        def fake_urlopen(request, timeout=30):
+            if state["fail"]:
+                raise HTTPError(request.full_url, 500, "down", {}, None)
+            return _ok_response()
+
+        monkeypatch.setattr("inventory.alerts.urlopen", fake_urlopen)
+        assert update_alerts().email.startswith("failed:")
+        assert len(mail.outbox) == 1
+        assert update_alerts().email.startswith("failed:")
+        assert len(mail.outbox) == 1
+        state["fail"] = False
+        assert update_alerts().email == "sent"
+        assert len(mail.outbox) == 1
+
+    def test_ntfy_accepts_non_latin_alert_titles(self, email_on, godaddy, monkeypatch):
+        domain(godaddy, 3, name="例え.example")
+        email_on.HOMEBASE_ALERT_NTFY_ENABLED = True
+        email_on.HOMEBASE_ALERT_NTFY_TOPIC = "homebase-alerts"
+        calls = []
+
+        def fake_urlopen(request, timeout=30):
+            calls.append(json.loads(request.data.decode()))
+            return _ok_response()
+
+        monkeypatch.setattr("inventory.alerts.urlopen", fake_urlopen)
+        assert update_alerts().email == "sent"
+        assert "例え.example" in calls[0]["title"]
+        assert len(mail.outbox) == 1
 
     def test_command_reports_the_outcome(self, email_on, godaddy):
         domain(godaddy, 3)

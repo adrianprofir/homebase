@@ -5,8 +5,10 @@ See `.env.example` for the full list.
 """
 
 from pathlib import Path
+from urllib.parse import urlparse
 
 import environ
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -173,10 +175,22 @@ HOMEBASE_DOWNTIME_ALERT_MINUTES = env.int("HOMEBASE_DOWNTIME_ALERT_MINUTES", def
 HOMEBASE_ALERT_EMAIL_TO = env.list("HOMEBASE_ALERT_EMAIL_TO", default=[])
 HOMEBASE_ALERT_EMAIL_ENABLED = bool(email_host and HOMEBASE_ALERT_EMAIL_TO)
 # Optional push channels alongside email. ntfy posts to a topic; webhook POSTs JSON.
+def _require_http_url(name, value):
+    if not value:
+        return
+    parts = urlparse(value)
+    if parts.scheme not in ("http", "https") or not parts.netloc:
+        raise ImproperlyConfigured(
+            f"{name} must be an http or https URL with a host, not {value!r}."
+        )
+
+
 HOMEBASE_ALERT_NTFY_SERVER = env.str("HOMEBASE_ALERT_NTFY_SERVER", default="https://ntfy.sh")
 HOMEBASE_ALERT_NTFY_TOPIC = env.str("HOMEBASE_ALERT_NTFY_TOPIC", default="")
+_require_http_url("HOMEBASE_ALERT_NTFY_SERVER", HOMEBASE_ALERT_NTFY_SERVER)
 HOMEBASE_ALERT_NTFY_ENABLED = bool(HOMEBASE_ALERT_NTFY_TOPIC)
 HOMEBASE_ALERT_WEBHOOK_URL = env.str("HOMEBASE_ALERT_WEBHOOK_URL", default="")
+_require_http_url("HOMEBASE_ALERT_WEBHOOK_URL", HOMEBASE_ALERT_WEBHOOK_URL)
 HOMEBASE_ALERT_WEBHOOK_ENABLED = bool(HOMEBASE_ALERT_WEBHOOK_URL)
 # Dashboard address to link from alert email, for example http://192.0.2.10:8090/
 HOMEBASE_DASHBOARD_URL = env.str("HOMEBASE_DASHBOARD_URL", default="")
