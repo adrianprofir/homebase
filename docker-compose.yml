@@ -53,11 +53,23 @@ services:
     command:
       - sh
       - -c
-      - while true; do python manage.py monitor; sleep "$${CHECK_INTERVAL_SECONDS:-300}"; done
+      - |
+        while true; do
+          python manage.py monitor
+          touch /tmp/heartbeat
+          sleep "$${CHECK_INTERVAL_SECONDS:-300}"
+        done
     init: true
     depends_on:
       web:
         condition: service_healthy
+    healthcheck:
+      # The loop touches a heartbeat file after every monitor run.
+      test: ["CMD-SHELL", "test -n \"$$(find /tmp/heartbeat -mmin -30 2>/dev/null)\""]
+      interval: 60s
+      timeout: 5s
+      start_period: 90s
+      retries: 3
 
 volumes:
   pgdata:

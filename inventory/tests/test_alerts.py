@@ -1,7 +1,9 @@
+import json
 import smtplib
 from datetime import timedelta
 from decimal import Decimal
 from io import StringIO
+from urllib.error import HTTPError
 
 import pytest
 from django.core import mail
@@ -15,6 +17,14 @@ from inventory.models import Alert, App, Domain, Provider, Subscription
 pytestmark = pytest.mark.django_db
 
 
+def _ok_response():
+    return type(
+        "R",
+        (),
+        {"status": 200, "__enter__": lambda s: s, "__exit__": lambda *args: None},
+    )()
+
+
 @pytest.fixture(autouse=True)
 def alert_settings(settings):
     settings.HOMEBASE_EXPIRY_ALERT_DAYS = 30
@@ -22,6 +32,11 @@ def alert_settings(settings):
     settings.HOMEBASE_DOWNTIME_ALERT_MINUTES = 10
     settings.HOMEBASE_ALERT_EMAIL_ENABLED = False
     settings.HOMEBASE_ALERT_EMAIL_TO = ["alice@example.com"]
+    settings.HOMEBASE_ALERT_NTFY_ENABLED = False
+    settings.HOMEBASE_ALERT_NTFY_TOPIC = ""
+    settings.HOMEBASE_ALERT_NTFY_SERVER = "https://ntfy.example"
+    settings.HOMEBASE_ALERT_WEBHOOK_ENABLED = False
+    settings.HOMEBASE_ALERT_WEBHOOK_URL = ""
     settings.HOMEBASE_DASHBOARD_URL = "http://192.0.2.10:8090/"
     for name in ("CLOUDFLARE", "GODADDY", "DIGITALOCEAN", "HOSTINGER"):
         setattr(settings, f"{name}_API_TOKEN", "")
@@ -350,7 +365,7 @@ class TestAlertEmail:
         assert "SMTPAuthenticationError" in alert.email_error
         assert alert.emailed_severity == ""
         client.force_login(django_user_model.objects.create_user("alice", password="x"))
-        assert "Alert email failed:" in client.get(reverse("dashboard")).content.decode()
+        assert "Alert delivery failed:" in client.get(reverse("dashboard")).content.decode()
 
         monkeypatch.undo()
         assert update_alerts().email == "sent"
@@ -368,7 +383,7 @@ class TestAlertEmail:
 
         monkeypatch.setattr("django.core.mail.EmailMessage.send", refuse)
         assert update_alerts().email.startswith("failed:")
-        assert "Alert email failed:" in client.get(reverse("dashboard")).content.decode()
+        assert "Alert delivery failed:" in client.get(reverse("dashboard")).content.decode()
 
         item.expires_on = in_days(400)
         item.save()
@@ -380,7 +395,7 @@ class TestAlertEmail:
         assert alert.email_error == ""
         response = client.get(reverse("dashboard"))
         assert response.context["email_error"] is None
-        assert "Alert email failed:" not in response.content.decode()
+        assert "Alert delivery failed:" not in response.content.decode()
         assert mail.outbox == []
 
     @pytest.mark.parametrize(
@@ -426,9 +441,64 @@ class TestAlertEmail:
         response = client.get(reverse("dashboard"))
 
         assert bool(response.context["email_error"]) == pending
-        assert ("Alert email failed:" in response.content.decode()) == pending
+        assert ("Alert delivery failed:" in response.content.decode()) == pending
         assert send_alert_email(now) == ("sent" if pending else "nothing to send")
         assert len(mail.outbox) == int(pending)
+
+    def test_ntfy_posts_pending_alerts(self, alert_settings, godaddy, monkeypatch):
+        domain(godaddy, 3)
+        alert_settings.HOMEBASE_ALERT_NTFY_ENABLED = True
+        alert_settings.HOMEBASE_ALERT_NTFY_TOPIC = "homebase-alerts"
+        calls = []
+
+        def fake_urlopen(request, timeout=30):
+            calls.append(request)
+            return _ok_response()
+
+        monkeypatch.setattr("inventory.alerts.urlopen", fake_urlopen)
+        assert update_alerts().email == "sent"
+        assert len(calls) == 1
+        request = calls[0]
+        assert request.full_url == "https://ntfy.example/homebase-alerts"
+        assert request.data
+        assert b"example.com expires in 3 days" in request.data
+
+    def test_webhook_posts_json(self, alert_settings, godaddy, monkeypatch):
+        domain(godaddy, 3)
+        alert_settings.HOMEBASE_ALERT_WEBHOOK_ENABLED = True
+        alert_settings.HOMEBASE_ALERT_WEBHOOK_URL = "https://hooks.example/homebase"
+        calls = []
+
+        def fake_urlopen(request, timeout=30):
+            calls.append(request)
+            return _ok_response()
+
+        monkeypatch.setattr("inventory.alerts.urlopen", fake_urlopen)
+        assert update_alerts().email == "sent"
+        payload = json.loads(calls[0].data.decode())
+        assert payload["subject"].startswith("[homebase]")
+        assert payload["raised"][0]["title"].startswith("example.com expires")
+
+    def test_failed_ntfy_is_recorded_and_retried(self, alert_settings, godaddy, monkeypatch):
+        domain(godaddy, 3)
+        alert_settings.HOMEBASE_ALERT_NTFY_ENABLED = True
+        alert_settings.HOMEBASE_ALERT_NTFY_TOPIC = "homebase-alerts"
+        state = {"fail": True}
+
+        def fake_urlopen(request, timeout=30):
+            if state["fail"]:
+                raise HTTPError(request.full_url, 503, "down", {}, None)
+            return _ok_response()
+
+        monkeypatch.setattr("inventory.alerts.urlopen", fake_urlopen)
+        assert update_alerts().email.startswith("failed:")
+        alert = Alert.objects.get()
+        assert "ntfy HTTPError" in alert.email_error
+
+        state["fail"] = False
+        assert update_alerts().email == "sent"
+        alert.refresh_from_db()
+        assert alert.emailed_severity == "critical"
 
     def test_command_reports_the_outcome(self, email_on, godaddy):
         domain(godaddy, 3)

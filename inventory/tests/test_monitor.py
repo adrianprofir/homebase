@@ -7,7 +7,7 @@ from django.core.management import CommandError, call_command
 from django.utils import timezone
 
 from inventory import providers
-from inventory.models import Alert, App, AppCheck, Domain, Provider
+from inventory.models import Alert, App, AppCheck, Domain, MonitorHeartbeat, Provider
 from inventory.monitoring import CheckResult
 
 from .fake_api import FakeApi
@@ -61,6 +61,7 @@ def test_runs_every_step(setup):
     assert AppCheck.objects.count() == 1
     assert Alert.objects.get().title.startswith("soon.example expires in 3 days")
     assert len(mail.outbox) == 1
+    assert MonitorHeartbeat.objects.filter(pk=1).exists()
 
 
 def test_syncs_providers_only_when_due(setup):
@@ -84,3 +85,4 @@ def test_a_crashed_step_does_not_stop_the_others(setup, monkeypatch):
 
     assert Alert.objects.exists()
     assert AppCheck.objects.exists()
+    assert not MonitorHeartbeat.objects.exists()

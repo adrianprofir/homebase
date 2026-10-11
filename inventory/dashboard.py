@@ -8,7 +8,7 @@ from django.conf import settings
 from django.db.models import Max
 from django.urls import reverse
 
-from .models import App, AppCheck, Domain, Provider, Subscription
+from .models import App, AppCheck, Domain, MonitorHeartbeat, Provider, Subscription
 from .providers import INTEGRATIONS
 
 CENT = Decimal("0.01")
@@ -170,9 +170,13 @@ class MonitorHealth:
 
 def monitor_health(now):
     """Whether `monitor` still runs: a stalled monitor cannot alert about itself."""
-    if not App.checkable().exists():
-        return MonitorHealth(last_check_at=None, stalled=False)
-    last = AppCheck.objects.aggregate(last=Max("checked_at"))["last"]
+    heartbeat = MonitorHeartbeat.objects.filter(pk=1).values_list("last_run_at", flat=True).first()
     # Three missed runs, plus slack for slow checks.
     allowed = timedelta(seconds=3 * settings.HOMEBASE_CHECK_INTERVAL_SECONDS + 60)
+    if App.checkable().exists():
+        last_check = AppCheck.objects.aggregate(last=Max("checked_at"))["last"]
+        seen = [t for t in (last_check, heartbeat) if t is not None]
+        last = max(seen) if seen else None
+    else:
+        last = heartbeat
     return MonitorHealth(last_check_at=last, stalled=last is None or now - last > allowed)

@@ -17,7 +17,7 @@
     {% else %}
       <strong>No uptime check has run yet.</strong>
     {% endif %}
-    Uptime, provider data, and alert email are stale until it runs again. Check the <code>checker</code> service: <code>docker compose logs checker</code>.
+    Uptime, provider data, and alert delivery are stale until it runs again. Check the <code>checker</code> service: <code>docker compose logs checker</code>.
   </div>
 {% endif %}
 
@@ -25,11 +25,13 @@
   <div class="card-head">
     <h2>Alerts</h2>
     <p class="muted small">
-      {% if email_enabled %}Email goes to {{ email_to|join:", " }}{% elif demo_mode %}Email is off in the demo{% else %}Email is off: set <code>EMAIL_HOST</code> and <code>HOMEBASE_ALERT_EMAIL_TO</code> to turn it on{% endif %}
+      {% if email_enabled %}Email goes to {{ email_to|join:", " }}{% if alert_ntfy_enabled %}; ntfy topic <code>{{ alert_ntfy_topic }}</code>{% endif %}{% if alert_webhook_enabled %}; webhook configured{% endif %}
+      {% elif alert_ntfy_enabled or alert_webhook_enabled %}{% if alert_ntfy_enabled %}ntfy topic <code>{{ alert_ntfy_topic }}</code>{% endif %}{% if alert_ntfy_enabled and alert_webhook_enabled %}; {% endif %}{% if alert_webhook_enabled %}webhook configured{% endif %}
+      {% elif demo_mode %}Alert delivery is off in the demo{% else %}Alerts are dashboard-only: set <code>EMAIL_HOST</code> and <code>HOMEBASE_ALERT_EMAIL_TO</code>, or <code>HOMEBASE_ALERT_NTFY_TOPIC</code>, or <code>HOMEBASE_ALERT_WEBHOOK_URL</code>{% endif %}
     </p>
   </div>
   {% if email_error %}
-    <p class="card-note text-bad">Alert email failed: {{ email_error }}. It is retried on every monitor run.</p>
+    <p class="card-note text-bad">Alert delivery failed: {{ email_error }}. It is retried on every monitor run.</p>
   {% endif %}
   {% if alerts %}
     <ul class="alert-list">

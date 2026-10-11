@@ -84,6 +84,18 @@ class TestStartupRefusal:
         with pytest.raises(ImproperlyConfigured, match="EMAIL_HOST"):
             refuse_unsafe_settings()
 
+    def test_refuses_ntfy_topic(self, demo):
+        demo.HOMEBASE_ALERT_NTFY_TOPIC = "secret-topic"
+
+        with pytest.raises(ImproperlyConfigured, match="HOMEBASE_ALERT_NTFY_TOPIC"):
+            refuse_unsafe_settings()
+
+    def test_refuses_webhook_url(self, demo):
+        demo.HOMEBASE_ALERT_WEBHOOK_URL = "https://hooks.example/homebase"
+
+        with pytest.raises(ImproperlyConfigured, match="HOMEBASE_ALERT_WEBHOOK_URL"):
+            refuse_unsafe_settings()
+
     def test_allows_a_clean_demo_and_tokens_outside_demo_mode(self, demo):
         refuse_unsafe_settings()
         demo.DEMO_MODE = False

@@ -400,3 +400,19 @@ class Alert(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class MonitorHeartbeat(models.Model):
+    """Last successful `monitor` run, for stalled-monitor detection when no apps are checked."""
+
+    last_run_at = models.DateTimeField()
+
+    class Meta:
+        verbose_name_plural = "monitor heartbeat"
+
+    def __str__(self):
+        return f"monitor last run {self.last_run_at:%Y-%m-%d %H:%M}"
+
+    @classmethod
+    def record(cls, when):
+        cls.objects.update_or_create(pk=1, defaults={"last_run_at": when})

@@ -90,7 +90,7 @@ The stack runs these services:
 
 - `db`: Postgres 18, with data in the `pgdata` named volume.
 - `web`: gunicorn serving Django, with static files served by WhiteNoise, published on `HOMEBASE_BIND_ADDRESS`.
-- `checker`: runs `monitor` every `CHECK_INTERVAL_SECONDS`: provider sync when due, app checks, and alerts.
+- `checker`: runs `monitor` every `CHECK_INTERVAL_SECONDS`: provider sync when due, app checks, and alerts. It has a heartbeat healthcheck like the demo stack.
 - `tailscale` (override only): forwards `HOMEBASE_TAILSCALE_ADDRESS` to the dashboard; see below for why it exists.
 
 ## Why Tailscale goes through a forwarder

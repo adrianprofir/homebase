@@ -6,6 +6,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from inventory.alerts import update_alerts
+from inventory.models import MonitorHeartbeat
 from inventory.monitoring import prune_history
 from inventory.providers import due_integrations, sync
 
@@ -35,8 +36,11 @@ class Command(BaseCommand):
             except Exception:
                 logger.exception("monitor step %r crashed", name)
                 crashed.append(name)
-        seconds = (timezone.now() - started).total_seconds()
+        finished = timezone.now()
+        seconds = (finished - started).total_seconds()
         self.log(f"monitor run finished in {seconds:.1f} s")
+        if not crashed:
+            MonitorHeartbeat.record(finished)
         if crashed:
             raise CommandError(f"monitor steps crashed: {', '.join(crashed)}")
 

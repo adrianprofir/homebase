@@ -14,6 +14,7 @@ from inventory.models import (
     AppCheck,
     DnsRecord,
     Domain,
+    MonitorHeartbeat,
     Provider,
     Server,
     Subscription,
@@ -321,7 +322,7 @@ class TestLiveDashboard:
         assert response.context["critical_count"] == 1
         assert "soon.example expires in 3 days" in content
         assert "since 2\xa0hours ago" in content
-        assert "Email is off" in content
+        assert "Alerts are dashboard-only" in content
 
     def test_no_current_alerts_without_alerts(self, user_client, settings):
         settings.DIGITALOCEAN_API_TOKEN = "do"
@@ -404,6 +405,23 @@ class TestLiveDashboard:
 
         assert "The monitor has not run" not in content
         assert "No uptime check has run yet" not in content
+
+    def test_stalled_monitor_with_no_checkable_apps(self, settings, user_client):
+        settings.HOMEBASE_CHECK_INTERVAL_SECONDS = 300
+        MonitorHeartbeat.objects.create(
+            last_run_at=timezone.now() - timedelta(minutes=30),
+        )
+
+        content = user_client.get(reverse("dashboard")).content.decode()
+
+        assert "The monitor has not run since" in content
+
+    def test_fresh_heartbeat_with_no_checkable_apps_has_no_banner(self, user_client):
+        MonitorHeartbeat.objects.create(last_run_at=timezone.now())
+
+        content = user_client.get(reverse("dashboard")).content.decode()
+
+        assert "The monitor has not run" not in content
 
     def test_uptime_columns(self, user_client):
         now = timezone.now()
