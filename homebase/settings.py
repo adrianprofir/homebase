@@ -174,6 +174,8 @@ HOMEBASE_DOWNTIME_ALERT_MINUTES = env.int("HOMEBASE_DOWNTIME_ALERT_MINUTES", def
 # Who gets alert email. Email is off unless this and EMAIL_HOST are both set.
 HOMEBASE_ALERT_EMAIL_TO = env.list("HOMEBASE_ALERT_EMAIL_TO", default=[])
 HOMEBASE_ALERT_EMAIL_ENABLED = bool(email_host and HOMEBASE_ALERT_EMAIL_TO)
+
+
 # Optional push channels alongside email. ntfy posts to a topic; webhook POSTs JSON.
 def _require_http_url(name, value):
     if not value:

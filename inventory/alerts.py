@@ -288,10 +288,7 @@ def _pending_for_channel(severity_field, resolution_field):
             )
     return Alert.objects.filter(
         (Q(resolved_at=None) & escalated)
-        | (
-            Q(resolved_at__isnull=False, **{resolution_field: False})
-            & ~Q(**{severity_field: ""})
-        )
+        | (Q(resolved_at__isnull=False, **{resolution_field: False}) & ~Q(**{severity_field: ""}))
     )
 
 
