@@ -69,7 +69,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "max=$$(( (3 * $${CHECK_INTERVAL_SECONDS:-300} + 60) / 60 + 1 )); test -n \"$$($$(find /tmp/heartbeat -mmin -$$max 2>/dev/null))\"",
+          "max=$$(( (3 * $${CHECK_INTERVAL_SECONDS:-300} + 60) / 60 + 1 )); test -n \"$$(find /tmp/heartbeat -mmin -$$max 2>/dev/null)\"",
         ]
       interval: 60s
       timeout: 5s
