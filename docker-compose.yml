@@ -64,13 +64,7 @@ services:
       web:
         condition: service_healthy
     healthcheck:
-      # Liveness only: the loop touches a file after each run (even if monitor failed).
-      # Window matches the dashboard stall tolerance (three intervals plus slack).
-      test:
-        [
-          "CMD-SHELL",
-          "max=$$(( (3 * $${CHECK_INTERVAL_SECONDS:-300} + 60) / 60 + 1 )); test -n \"$$(find /tmp/heartbeat -mmin -$$max 2>/dev/null)\"",
-        ]
+      test: ["CMD-SHELL", "/app/docker/checker-healthcheck.sh"]
       interval: 60s
       timeout: 5s
       start_period: 90s

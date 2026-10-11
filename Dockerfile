@@ -18,6 +18,7 @@ COPY . .
 RUN SECRET_KEY=collectstatic-only DATABASE_URL=postgres://unused/unused \
     python manage.py collectstatic --noinput
 
+RUN chmod +x /app/docker/checker-healthcheck.sh
 RUN useradd --system --uid 10001 --no-create-home homebase
 USER homebase
 
