@@ -129,6 +129,19 @@ class TestDashboardView:
         assert response.status_code == 302
         assert response.url == f"{reverse('login')}?next=/"
 
+    def test_head_request_succeeds(self, user_client):
+        response = user_client.head(reverse("dashboard"))
+
+        assert response.status_code == 200
+        assert response.content == b""
+
+    def test_uses_in_page_refresh_not_meta_refresh(self, user_client):
+        content = user_client.get(reverse("dashboard")).content.decode()
+
+        assert 'http-equiv="refresh"' not in content
+        assert "dashboard-refresh.js" in content
+        assert 'data-refresh-seconds="300"' in content
+
     def test_login_page_renders(self, client):
         response = client.get(reverse("login"))
 
@@ -421,6 +434,24 @@ class TestLiveDashboard:
         assert "75%" in content
         assert reverse("app_detail", args=[app.pk]) in content
 
+    def test_tls_badge_is_critical_at_exactly_three_days(self, user_client):
+        now = timezone.now()
+        app = App.objects.create(
+            name="edge",
+            url="https://edge.example",
+            last_checked_at=now,
+            last_check_ok=True,
+            last_check_tls_expires_at=now + timedelta(days=3, hours=1),
+        )
+
+        content = user_client.get(reverse("dashboard")).content.decode()
+
+        assert '<span class="badge badge-bad"' in content
+        assert "3 d</span>" in content
+        assert "edge.example" in content
+        detail = user_client.get(reverse("app_detail", args=[app.pk])).content.decode()
+        assert '<span class="text-bad">3 d</span>' in detail
+
     def test_domains_servers_and_tunnels(self, user_client, godaddy, cloudflare, digitalocean):
         domain = Domain.objects.create(
             name="example.com",
@@ -543,6 +574,21 @@ class TestAppDetail:
         response = client.get(reverse("app_detail", args=[app.pk]))
 
         assert response.status_code == 302
+
+    def test_head_request_succeeds(self, user_client):
+        app = App.objects.create(name="site", url="https://site.example")
+
+        response = user_client.head(reverse("app_detail", args=[app.pk]))
+
+        assert response.status_code == 200
+        assert response.content == b""
+
+    def test_uses_in_page_refresh_not_meta_refresh(self, user_client):
+        app = App.objects.create(name="site", url="https://site.example")
+        content = user_client.get(reverse("app_detail", args=[app.pk])).content.decode()
+
+        assert 'http-equiv="refresh"' not in content
+        assert "dashboard-refresh.js" in content
 
     def test_unknown_app_is_404(self, user_client):
         assert user_client.get(reverse("app_detail", args=[999])).status_code == 404

@@ -6,10 +6,10 @@ from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
-from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_safe
 
 from . import uptime
-from .alerts import current_alerts, duration, pending_email_alerts
+from .alerts import TLS_CRITICAL_DAYS, current_alerts, duration, pending_email_alerts
 from .dashboard import (
     cost_totals,
     monitor_health,
@@ -37,7 +37,7 @@ def login_required_unless_demo(view):
 
 
 @login_required_unless_demo
-@require_GET
+@require_safe
 def dashboard(request):
     now = timezone.now()
     today = timezone.localdate(now)
@@ -105,12 +105,13 @@ def dashboard(request):
         "sync_interval": settings.HOMEBASE_SYNC_INTERVAL_MINUTES,
         "apps": apps,
         "tls_alert_days": settings.HOMEBASE_TLS_ALERT_DAYS,
+        "tls_critical_days": TLS_CRITICAL_DAYS,
     }
     return render(request, "inventory/dashboard.html", context)
 
 
 @login_required_unless_demo
-@require_GET
+@require_safe
 def app_detail(request, pk):
     app = get_object_or_404(App.objects.select_related("server"), pk=pk)
     now = timezone.now()
@@ -126,6 +127,7 @@ def app_detail(request, pk):
             (app.last_check_tls_expires_at - now).days if app.last_check_tls_expires_at else None
         ),
         "tls_alert_days": settings.HOMEBASE_TLS_ALERT_DAYS,
+        "tls_critical_days": TLS_CRITICAL_DAYS,
         "uptime": uptime_by_window,
         "average_ms": uptime.average_response_ms(app.pk, since[1]),
         "days": uptime.daily_rows(app.pk, now, days=7),

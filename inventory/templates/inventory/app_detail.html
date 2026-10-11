@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% load humanize %}
+{% load humanize static %}
 
-{% block head %}<meta http-equiv="refresh" content="300">{% endblock %}
+{% block head %}<script src="{% static 'js/dashboard-refresh.js' %}" defer data-refresh-seconds="300"></script>{% endblock %}
 {% block title %}{{ app.name }} · homebase{% endblock %}
 
 {% block content %}
@@ -48,7 +48,7 @@
       <span class="stat-value">
         {% if tls_days_left is None %}-
         {% elif tls_days_left < 0 %}<span class="text-bad">Expired</span>
-        {% elif tls_days_left < 3 %}<span class="text-bad">{{ tls_days_left }} d</span>
+        {% elif tls_days_left <= tls_critical_days %}<span class="text-bad">{{ tls_days_left }} d</span>
         {% elif tls_days_left <= tls_alert_days %}<span class="text-warn">{{ tls_days_left }} d</span>
         {% else %}{{ tls_days_left }} d{% endif %}
       </span>

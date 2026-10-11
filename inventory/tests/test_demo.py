@@ -160,6 +160,7 @@ class TestPublicPages:
         for url in [reverse("dashboard"), reverse("app_detail", args=[app.pk])]:
             response = client.get(url)
             assert response.status_code == 200
+            assert client.head(url).status_code == 200
             assert "Everything here is fictional" in response.text
             # Anonymous demo pages start no session and set no CSRF cookie.
             assert not response.cookies
