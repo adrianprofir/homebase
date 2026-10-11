@@ -112,8 +112,7 @@ services:
     networks:
       - backend
     healthcheck:
-      # The loop touches a heartbeat file after every monitor run.
-      test: ["CMD-SHELL", "test -n \"$$(find /tmp/heartbeat -mmin -30 2>/dev/null)\""]
+      test: ["CMD-SHELL", "/app/docker/checker-healthcheck.sh"]
       interval: 60s
       timeout: 5s
       start_period: 90s

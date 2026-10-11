@@ -9,7 +9,7 @@ It is separate from the main `docker-compose.yml`, which is meant for your own i
 - With `DEMO_MODE=true`, visitors see the dashboard and app pages without logging in, and nothing they do can change data.
 - The data comes from `manage.py seed_demo`: a fictional home lab on reserved `.example` domains and documentation IP addresses, with every date relative to today.
 - App checks are simulated and provider syncs read canned responses, so the demo makes no outbound request.
-- homebase refuses to start in demo mode while any provider token or `EMAIL_HOST` is set, so the demo can never read a real account or send mail.
+- homebase refuses to start in demo mode while any provider token, `EMAIL_HOST`, `HOMEBASE_ALERT_NTFY_TOPIC`, or `HOMEBASE_ALERT_WEBHOOK_URL` is set, so the demo can never read a real account or send alerts.
 - Links into the Django admin render as plain text.
   Keep `/admin/` private, for example behind your access proxy, or leave it unrouted.
 

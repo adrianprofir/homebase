@@ -388,6 +388,20 @@ class Alert(models.Model):
         help_text="The highest severity an email has gone out for.",
     )
     resolution_emailed = models.BooleanField(default=False)
+    ntfy_emailed_severity = models.CharField(
+        max_length=10,
+        choices=Severity,
+        blank=True,
+        help_text="The highest severity an ntfy notification has gone out for.",
+    )
+    ntfy_resolution_emailed = models.BooleanField(default=False)
+    webhook_emailed_severity = models.CharField(
+        max_length=10,
+        choices=Severity,
+        blank=True,
+        help_text="The highest severity a webhook notification has gone out for.",
+    )
+    webhook_resolution_emailed = models.BooleanField(default=False)
     email_error = models.CharField(max_length=255, blank=True)
 
     class Meta:
@@ -400,3 +414,19 @@ class Alert(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class MonitorHeartbeat(models.Model):
+    """Last successful `monitor` run, for stalled-monitor detection when no apps are checked."""
+
+    last_run_at = models.DateTimeField()
+
+    class Meta:
+        verbose_name_plural = "monitor heartbeat"
+
+    def __str__(self):
+        return f"monitor last run {self.last_run_at:%Y-%m-%d %H:%M}"
+
+    @classmethod
+    def record(cls, when):
+        cls.objects.update_or_create(pk=1, defaults={"last_run_at": when})

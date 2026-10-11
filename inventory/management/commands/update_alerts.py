@@ -6,7 +6,7 @@ from inventory.alerts import update_alerts
 class Command(BaseCommand):
     help = (
         "Raise and resolve alerts for expiries, renewals, TLS certificates, downtime, and "
-        "provider sync failures, and email the changes when SMTP is configured."
+        "provider sync failures, and notify the changes when a delivery channel is configured."
     )
 
     def handle(self, *args, **options):

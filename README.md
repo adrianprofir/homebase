@@ -164,6 +164,8 @@ The Docker Compose quickstart above reads the same file.
 | `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS`, `EMAIL_USE_SSL` | SMTP server for alert email. Leave `EMAIL_HOST` empty to keep email off. |
 | `DEFAULT_FROM_EMAIL` | Sender address of alert email. |
 | `HOMEBASE_ALERT_EMAIL_TO` | Comma-separated alert email recipients. Email is sent only when this and `EMAIL_HOST` are set. |
+| `HOMEBASE_ALERT_NTFY_SERVER`, `HOMEBASE_ALERT_NTFY_TOPIC` | Optional ntfy push alerts via JSON publish (default server `https://ntfy.sh`). Use a hard-to-guess topic; authenticated or access-token topics are not configured yet. |
+| `HOMEBASE_ALERT_WEBHOOK_URL` | Optional webhook for alert delivery. homebase POSTs JSON with subject, body, and alert lists. |
 | `HOMEBASE_DASHBOARD_URL` | Dashboard address used for links in alert email, such as `http://192.0.2.10:8090/`. |
 | `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | Database created by Docker Compose. |
 | `HOMEBASE_BIND_ADDRESS`, `HOMEBASE_PORT` | Host address and port the dashboard is published on by Docker Compose. |

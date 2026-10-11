@@ -53,11 +53,22 @@ services:
     command:
       - sh
       - -c
-      - while true; do python manage.py monitor; sleep "$${CHECK_INTERVAL_SECONDS:-300}"; done
+      - |
+        while true; do
+          python manage.py monitor
+          touch /tmp/heartbeat
+          sleep "$${CHECK_INTERVAL_SECONDS:-300}"
+        done
     init: true
     depends_on:
       web:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "/app/docker/checker-healthcheck.sh"]
+      interval: 60s
+      timeout: 5s
+      start_period: 90s
+      retries: 3
 
 volumes:
   pgdata:
