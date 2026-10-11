@@ -3,10 +3,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-from django.core.exceptions import ImproperlyConfigured
-
-from homebase.secrets import PLACEHOLDER_SECRET, refuse_placeholder_secrets
+from homebase.secrets import (
+    PLACEHOLDER_SECRET,
+    placeholder_secret_fields,
+    refuse_placeholder_secrets,
+)
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 
@@ -22,29 +23,27 @@ def manage(*args, **env):
     )
 
 
+class TestPlaceholderSecretFields:
+    def test_allows_placeholders_in_debug(self):
+        assert placeholder_secret_fields(True, PLACEHOLDER_SECRET, PLACEHOLDER_SECRET) == []
+
+    def test_refuses_placeholder_secret_key(self):
+        assert placeholder_secret_fields(False, PLACEHOLDER_SECRET, "real-password") == [
+            "SECRET_KEY"
+        ]
+
+    def test_refuses_placeholder_database_password(self):
+        assert placeholder_secret_fields(False, "a-real-secret", PLACEHOLDER_SECRET) == [
+            "database password (POSTGRES_PASSWORD / DATABASE_URL)"
+        ]
+
+
 class TestRefusePlaceholderSecrets:
     def test_allows_placeholders_in_debug(self, settings):
         settings.DEBUG = True
         settings.SECRET_KEY = PLACEHOLDER_SECRET
-        settings.DATABASES["default"]["PASSWORD"] = PLACEHOLDER_SECRET
 
         refuse_placeholder_secrets()
-
-    def test_refuses_placeholder_secret_key(self, settings):
-        settings.DEBUG = False
-        settings.SECRET_KEY = PLACEHOLDER_SECRET
-        settings.DATABASES["default"]["PASSWORD"] = "real-password"
-
-        with pytest.raises(ImproperlyConfigured, match="SECRET_KEY"):
-            refuse_placeholder_secrets()
-
-    def test_refuses_placeholder_database_password(self, settings):
-        settings.DEBUG = False
-        settings.SECRET_KEY = "a-real-secret"
-        settings.DATABASES["default"]["PASSWORD"] = PLACEHOLDER_SECRET
-
-        with pytest.raises(ImproperlyConfigured, match="database password"):
-            refuse_placeholder_secrets()
 
     def test_manage_py_will_not_start_with_placeholders(self):
         result = manage(

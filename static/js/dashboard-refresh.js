@@ -5,15 +5,27 @@
     return;
   }
 
+  let refreshing = false;
+
   async function refreshInPlace() {
+    if (refreshing || document.hidden) {
+      return;
+    }
+    refreshing = true;
     const scrollX = window.scrollX;
     const scrollY = window.scrollY;
+    const pageUrl = window.location.href;
     try {
-      const response = await fetch(window.location.href, {
+      const response = await fetch(pageUrl, {
         credentials: "same-origin",
         cache: "no-store",
         headers: { Accept: "text/html" },
+        signal: AbortSignal.timeout(60_000),
       });
+      if (response.redirected || response.url !== pageUrl) {
+        window.location.reload();
+        return;
+      }
       if (!response.ok) {
         return;
       }
@@ -29,6 +41,8 @@
       window.scrollTo(scrollX, scrollY);
     } catch {
       // Network blips should not interrupt reading the dashboard.
+    } finally {
+      refreshing = false;
     }
   }
 

@@ -122,6 +122,21 @@ ssh server.example 'cd /srv/homebase && docker compose up -d --build'
 
 `tar` does not delete files that were removed from the repository; they are harmless, but you can delete them by hand.
 
+### Placeholder secrets in `.env`
+
+homebase refuses to start with `DEBUG=false` while `SECRET_KEY` or `POSTGRES_PASSWORD` is still the example value `change-me`.
+Set real values in `.env` before you upgrade, then rebuild.
+
+Postgres only reads `POSTGRES_PASSWORD` when the `pgdata` volume is first created.
+If the database already exists and you change the password in `.env`, the app and Postgres will disagree until you update the role inside the database, for example:
+
+```sh
+docker compose exec db psql -U homebase -d homebase \
+  -c "ALTER USER homebase PASSWORD 'your-new-password';"
+```
+
+Use the same user name and password you put in `.env`.
+
 ## Backups
 
 The inventory lives in the `pgdata` volume.
