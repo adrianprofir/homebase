@@ -1,0 +1,22 @@
+{% load static %}
+{{ analytics_config|json_script:"analytics-config" }}
+<div
+  id="analytics-consent-banner"
+  class="analytics-consent"
+  role="dialog"
+  aria-labelledby="analytics-consent-title"
+  aria-describedby="analytics-consent-text"
+  hidden
+>
+  <div class="analytics-consent-inner wrap">
+    <p id="analytics-consent-text" class="analytics-consent-text">
+      <span id="analytics-consent-title" class="analytics-consent-title">Analytics</span>
+      This site uses analytics, including session recordings with typed text hidden, to understand how visitors use it.
+    </p>
+    <div class="analytics-consent-actions">
+      <button type="button" class="analytics-consent-btn" data-analytics-consent="granted">Accept</button>
+      <button type="button" class="analytics-consent-btn" data-analytics-consent="denied">Decline</button>
+    </div>
+  </div>
+</div>
+<script src="{% static 'js/analytics.js' %}" defer></script>

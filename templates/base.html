@@ -40,5 +40,11 @@
     {% endif %}
     {% block content %}{% endblock %}
   </main>
+  {% if analytics_enabled %}
+    <footer class="site-footer wrap">
+      <button type="button" class="analytics-preferences" id="analytics-preferences">Analytics preferences</button>
+    </footer>
+    {% include "includes/analytics.html" %}
+  {% endif %}
 </body>
 </html>

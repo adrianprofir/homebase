@@ -58,6 +58,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "inventory.context_processors.demo",
+                "homebase.analytics.analytics_context",
             ],
         },
     },
@@ -205,3 +206,9 @@ HOMEBASE_DASHBOARD_URL = env.str("HOMEBASE_DASHBOARD_URL", default="")
 DEMO_MODE = env.bool("DEMO_MODE", default=False)
 # A site this instance belongs to, linked from a strip above the header. Empty: no strip.
 MAIN_SITE_URL = env.str("MAIN_SITE_URL", default="")
+
+# Optional PostHog analytics (EU cloud). Off unless POSTHOG_PROJECT_KEY is set.
+POSTHOG_PROJECT_KEY = env.str("POSTHOG_PROJECT_KEY", default="")
+POSTHOG_HOST = env.str("POSTHOG_HOST", default="https://eu.i.posthog.com")
+# Optional cookie Domain= for shared consent across subdomains. Empty: host-only cookie.
+ANALYTICS_COOKIE_DOMAIN = env.str("ANALYTICS_COOKIE_DOMAIN", default="")
