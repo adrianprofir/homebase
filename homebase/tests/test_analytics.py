@@ -1,12 +1,13 @@
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
-
-HARNESS = Path(__file__).resolve().parent / "analytics_consent_harness.mjs"
 from django.contrib.auth import get_user_model
 from django.urls import reverse
+
+HARNESS = Path(__file__).resolve().parent / "analytics_consent_harness.mjs"
 
 
 @pytest.fixture
@@ -55,8 +56,11 @@ def test_analytics_absent_on_admin_login(client, settings):
 
 
 def test_analytics_consent_harness_js():
-    result = subprocess.run(
-        ["node", str(HARNESS)],
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    result = subprocess.run(  # noqa: S603
+        [node, str(HARNESS)],
         capture_output=True,
         text=True,
         timeout=30,
