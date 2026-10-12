@@ -1,0 +1,3 @@
+{% load static %}
+{{ analytics_config|json_script:"analytics-config" }}
+<script src="{% static 'js/analytics.js' %}" defer></script>

@@ -141,6 +141,7 @@ The dashboard works the alerts out on every page load, so an edit in the admin s
 All settings come from environment variables, read from a `.env` file in the repository root when present.
 Copy `.env.example` to `.env` and fill it in; `.env` is git-ignored and must never be committed.
 The Docker Compose quickstart above reads the same file.
+PostHog analytics, the consent banner, and session recording stay fully off unless you set `POSTHOG_PROJECT_KEY`; that is the default for local development, tests, and every self-hosted install.
 
 | Variable | Purpose |
 | --- | --- |
@@ -178,6 +179,9 @@ The Docker Compose quickstart above reads the same file.
 | `SECURE_HSTS_SECONDS` | Turn on HSTS for this many seconds (default 0, off). Start small: browsers remember it. |
 | `DEMO_MODE` | Run a public, read-only demo on fictional data; see [Demo mode](#demo-mode). |
 | `MAIN_SITE_URL` | Adds a strip above the header that links back to this site. Empty: no strip. |
+| `POSTHOG_PROJECT_KEY` | PostHog project API key (EU cloud). Analytics, the consent banner, and session recording stay **off** unless this is set. |
+| `POSTHOG_HOST` | PostHog ingestion host (default `https://eu.i.posthog.com`). |
+| `ANALYTICS_COOKIE_DOMAIN` | Optional `Domain=` for the shared analytics consent cookie across subdomains. Empty: host-only cookie. |
 
 Generate a secret key with:
 

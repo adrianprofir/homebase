@@ -31,6 +31,9 @@
       {% endif %}
     </div>
   </header>
+  {% if analytics_enabled %}
+    {% include "includes/analytics-banner.html" %}
+  {% endif %}
   <main class="wrap">
     {% if demo_mode %}
       <div class="banner banner-info" role="note">
@@ -40,5 +43,11 @@
     {% endif %}
     {% block content %}{% endblock %}
   </main>
+  {% if analytics_enabled %}
+    <footer class="site-footer wrap">
+      <button type="button" class="analytics-preferences" id="analytics-preferences">Analytics preferences</button>
+    </footer>
+    {% include "includes/analytics.html" %}
+  {% endif %}
 </body>
 </html>
