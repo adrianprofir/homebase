@@ -16,8 +16,7 @@
 
   const banner = document.getElementById("analytics-consent-banner");
   const preferences = document.getElementById("analytics-preferences");
-  let posthogLoaded = false;
-  let capturingActive = false;
+  let loadStarted = false;
 
   function readConsent() {
     const match = document.cookie.match(
@@ -91,29 +90,31 @@
     );
   }
 
-  function reconcileOptIn(ph) {
-    if (!ph || typeof ph.opt_in_capturing !== "function") {
+  function applyConsentToSdk(ph) {
+    if (!ph) {
       return;
     }
-    ph.opt_in_capturing();
-    capturingActive = true;
+    if (readConsent() === "granted") {
+      ph.register({ app: config.app });
+      if (typeof ph.opt_in_capturing === "function") {
+        ph.opt_in_capturing();
+      }
+      return;
+    }
+    if (typeof ph.opt_out_capturing === "function") {
+      ph.opt_out_capturing();
+    }
   }
 
-  function loadPosthog(onReady) {
+  function loadPosthog() {
     if (window.posthog && window.posthog.__loaded) {
-      if (readConsent() === "granted") {
-        window.posthog.register({ app: config.app });
-        reconcileOptIn(window.posthog);
-      }
-      if (onReady) {
-        onReady(window.posthog);
-      }
+      applyConsentToSdk(window.posthog);
       return;
     }
-    if (posthogLoaded) {
+    if (loadStarted) {
       return;
     }
-    posthogLoaded = true;
+    loadStarted = true;
 
     /* PostHog snippet loader (eu cloud assets host derived from api_host). */
     (function (t, e) {
@@ -171,44 +172,36 @@
       person_profiles: "always",
       cross_subdomain_cookie: true,
       persistence: "localStorage+cookie",
+      opt_out_capturing_by_default: true,
       session_recording: {
         maskAllInputs: true,
       },
       loaded: function (ph) {
         ph.__loaded = true;
-        ph.register({ app: config.app });
-        if (readConsent() === "granted") {
-          reconcileOptIn(ph);
-        }
-        if (onReady) {
-          onReady(ph);
-        }
+        applyConsentToSdk(ph);
       },
     });
   }
 
   function startCapturing() {
     loadPosthog();
-  }
-
-  function stopCapturing() {
-    if (window.posthog && capturingActive) {
-      window.posthog.opt_out_capturing();
-      capturingActive = false;
+    if (window.posthog && !window.posthog.__loaded) {
+      applyConsentToSdk(window.posthog);
     }
   }
 
+  function stopCapturing() {
+    applyConsentToSdk(window.posthog);
+  }
+
   function onChoice(value) {
-    const previous = readConsent();
     setConsent(value);
     setBannerOpen(false);
     if (value === "granted") {
       startCapturing();
       return;
     }
-    if (previous === "granted") {
-      stopCapturing();
-    }
+    stopCapturing();
   }
 
   if (banner) {

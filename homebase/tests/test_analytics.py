@@ -1,6 +1,10 @@
 import json
+import subprocess
+from pathlib import Path
 
 import pytest
+
+HARNESS = Path(__file__).resolve().parent / "analytics_consent_harness.mjs"
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
@@ -48,6 +52,16 @@ def test_analytics_absent_on_admin_login(client, settings):
     content = response.content.decode()
     assert "analytics-config" not in content
     assert "Analytics preferences" not in content
+
+
+def test_analytics_consent_harness_js():
+    result = subprocess.run(
+        ["node", str(HARNESS)],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
 
 
 @pytest.mark.django_db

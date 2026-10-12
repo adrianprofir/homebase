@@ -198,7 +198,9 @@ main.wrap {
   }
 
   .analytics-consent-text {
-    flex: 0 1 auto;
+    flex: none;
+    flex-basis: auto;
+    width: 100%;
   }
 
   .analytics-consent-actions {
