@@ -202,6 +202,10 @@ html.analytics-banner-open body {
     padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
   }
 
+  .analytics-consent-text {
+    flex: 0 1 auto;
+  }
+
   .analytics-consent-actions {
     width: 100%;
   }

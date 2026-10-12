@@ -76,9 +76,23 @@
     );
   }
 
+  function reconcileOptIn(ph) {
+    if (!ph || typeof ph.opt_in_capturing !== "function") {
+      return;
+    }
+    ph.opt_in_capturing();
+    capturingActive = true;
+  }
+
   function loadPosthog(onReady) {
     if (window.posthog && window.posthog.__loaded) {
-      onReady();
+      if (readConsent() === "granted") {
+        window.posthog.register({ app: config.app });
+        reconcileOptIn(window.posthog);
+      }
+      if (onReady) {
+        onReady(window.posthog);
+      }
       return;
     }
     if (posthogLoaded) {
@@ -148,7 +162,9 @@
       loaded: function (ph) {
         ph.__loaded = true;
         ph.register({ app: config.app });
-        capturingActive = true;
+        if (readConsent() === "granted") {
+          reconcileOptIn(ph);
+        }
         if (onReady) {
           onReady(ph);
         }
