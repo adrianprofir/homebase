@@ -31,6 +31,9 @@
       {% endif %}
     </div>
   </header>
+  {% if analytics_enabled %}
+    {% include "includes/analytics-banner.html" %}
+  {% endif %}
   <main class="wrap">
     {% if demo_mode %}
       <div class="banner banner-info" role="note">

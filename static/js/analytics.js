@@ -50,23 +50,38 @@
     document.cookie = cookie;
   }
 
+  function usesFixedBanner() {
+    return window.matchMedia("(min-width: 641px)").matches;
+  }
+
+  function clearBannerPadding() {
+    document.documentElement.classList.remove("analytics-banner-open");
+    document.documentElement.style.removeProperty("--analytics-banner-pad");
+  }
+
   function setBannerOpen(open) {
     if (!banner) {
       return;
     }
     if (open) {
       banner.hidden = false;
-      document.documentElement.classList.add("analytics-banner-open");
-      requestAnimationFrame(syncBannerPadding);
+      if (usesFixedBanner()) {
+        document.documentElement.classList.add("analytics-banner-open");
+        requestAnimationFrame(syncBannerPadding);
+      } else {
+        clearBannerPadding();
+      }
     } else {
       banner.hidden = true;
-      document.documentElement.classList.remove("analytics-banner-open");
-      document.documentElement.style.removeProperty("--analytics-banner-pad");
+      clearBannerPadding();
     }
   }
 
   function syncBannerPadding() {
-    if (!banner || banner.hidden) {
+    if (!banner || banner.hidden || !usesFixedBanner()) {
+      if (!usesFixedBanner()) {
+        clearBannerPadding();
+      }
       return;
     }
     const height = banner.getBoundingClientRect().height;
