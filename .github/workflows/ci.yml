@@ -40,7 +40,7 @@ jobs:
               exit 1
             fi
           done < <(git ls-files -z 'deploy/*.sh' 'deploy/**/*.sh' 'docker/*.sh')
-      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: astral-sh/setup-uv@v10.3.2
       - name: Install dependencies
         run: uv sync --locked
       - name: Check formatting
